@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "wechat": {
-      "command": "bun",
-      "args": ["run", "${CLAUDE_PLUGIN_ROOT}/src/server.ts"]
+      "command": "bash",
+      "args": ["-c", "export PATH=\"$HOME/.bun/bin:$PATH\" && cd ${CLAUDE_PLUGIN_ROOT} && bun install --production --silent 2>/dev/null; bun run ${CLAUDE_PLUGIN_ROOT}/src/server.ts"]
     }
   }
 }
