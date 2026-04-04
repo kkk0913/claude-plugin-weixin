@@ -17,7 +17,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "start": "node dist/server.js",
+    "start": "bun install --no-summary && bun src/server.ts",
     "dev": "tsc --watch",
     "prepublishOnly": "npm run build"
   },
