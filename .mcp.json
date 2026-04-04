@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "wechat": {
-      "command": "bash",
-      "args": ["-c", "cd ${CLAUDE_PLUGIN_ROOT} && npm install --production --silent 2>/dev/null; npx tsx src/server.ts"]
+      "command": "bun",
+      "args": ["run", "${CLAUDE_PLUGIN_ROOT}/src/server.ts"]
     }
   }
 }
