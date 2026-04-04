@@ -68,7 +68,7 @@ export async function uploadMedia(
 
   return {
     encrypt_query_param: uploadParam.encrypt_query_param ?? '',
-    aes_key: Buffer.from(aesKey).toString('base64'),
+    aes_key: Buffer.from(aesKey, 'hex').toString('base64'),
     encrypt_type: 0,
   };
 }

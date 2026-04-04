@@ -20,8 +20,8 @@ import { WeixinClient } from './weixin/api.js';
 import { MessageType, type MessageItem, type WeixinMessage } from './weixin/types.js';
 import { downloadMedia } from './weixin/media.js';
 import { AccessControl } from './config/access.js';
-import { chunkText, safeName, sleep, assertSendable } from './util/helpers.js';
-import type { AccountConfig } from './weixin/types.js';
+import { chunkText, safeName, sleep, assertSendable, generateFileKey } from './util/helpers.js';
+import type { AccountConfig, CDNMedia } from './weixin/types.js';
 
 // ─── Constants ──────────────────────────────────────────────────────
 
@@ -29,6 +29,9 @@ const STATE_DIR = join(homedir(), '.claude', 'channels', 'weixin');
 const INBOX_DIR = join(STATE_DIR, 'inbox');
 const ACCOUNT_FILE = join(STATE_DIR, 'account.json');
 const MAX_CHUNK_LIMIT = 2048; // WeChat text limit ~2048 chars
+
+// Opaque handle registry for safe media downloads (prevents SSRF)
+const mediaHandles = new Map<string, CDNMedia>();
 
 // ─── Error Safety ───────────────────────────────────────────────────
 
@@ -53,7 +56,7 @@ function loadAccount(): AccountConfig | null {
 function saveAccount(config: AccountConfig): void {
   mkdirSync(STATE_DIR, { recursive: true });
   const tmp = ACCOUNT_FILE + '.tmp';
-  writeFileSync(tmp, JSON.stringify(config, null, 2) + '\n');
+  writeFileSync(tmp, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
   renameSync(tmp, ACCOUNT_FILE);
 }
 
@@ -105,10 +108,10 @@ mcp.setNotificationHandler(
     pendingPermissions.set(request_id, { tool_name, description, input_preview });
 
     // Send permission request to all allowed users as text messages
-    const access = new AccessControl(STATE_DIR);
-    for (const userId of allowedUserIds) {
+    access.reload();
+    for (const userId of access.allowedUsers) {
       const text =
-        `🔐 Permission: ${tool_name}\n` +
+        `Permission: ${tool_name}\n` +
         `${description}\n\n` +
         `Reply: yes ${request_id} or no ${request_id}`;
       await client
@@ -225,8 +228,14 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
 
           const { uploadMedia } = await import('./weixin/media.js');
           const cdnMedia = await uploadMedia(f, chat_id, mediaType, client);
-          const itemType = isImage ? MessageType.IMAGE : isVideo ? MessageType.VIDEO : MessageType.FILE;
-          const item: MessageItem = { type: itemType, media: cdnMedia } as MessageItem;
+          let item: MessageItem;
+          if (isImage) {
+            item = { type: MessageType.IMAGE, image_item: { media: cdnMedia } };
+          } else if (isVideo) {
+            item = { type: MessageType.VIDEO, video_item: { media: cdnMedia } };
+          } else {
+            item = { type: MessageType.FILE, file_item: { media: cdnMedia, file_name: f.split('/').pop() } };
+          }
           await client.sendMessage(chat_id, contextTokens.get(chat_id) ?? '', item);
         }
 
@@ -241,8 +250,12 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
       }
 
       case 'download_attachment': {
-        const fileId = args.file_id as string;
-        const cdnMedia = JSON.parse(fileId);
+        const handle = args.file_id as string;
+        const cdnMedia = mediaHandles.get(handle);
+        if (!cdnMedia) {
+          throw new Error('invalid or expired attachment handle');
+        }
+        mediaHandles.delete(handle);
         const filePath = await downloadMedia(cdnMedia, INBOX_DIR);
         return { content: [{ type: 'text', text: filePath }] };
       }
@@ -276,10 +289,10 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
 
 // ─── Outbound Chat Assertion ────────────────────────────────────────
 
-const allowedUserIds = new Set<string>();
-
 function assertAllowedChat(chatId: string): void {
-  if (!allowedUserIds.has(chatId)) {
+  access.reload();
+  const result = access.gate(chatId);
+  if (result.action !== 'deliver') {
     throw new Error(
       `chat ${chatId} is not allowlisted — pair first by having the user message from WeChat`,
     );
@@ -308,7 +321,8 @@ function extractTextContent(msg: WeixinMessage): string | null {
 async function handleInbound(msg: WeixinMessage): Promise<void> {
   const userId = msg.from_user_id;
 
-  // Gate check
+  // Gate check (reload from disk for cross-process consistency)
+  access.reload();
   const gateResult = access.gate(userId);
   if (gateResult.action === 'drop') return;
 
@@ -327,34 +341,10 @@ async function handleInbound(msg: WeixinMessage): Promise<void> {
     return;
   }
 
-  // Track this user as allowed
-  allowedUserIds.add(userId);
+  // Track context token
   contextTokens.set(userId, msg.context_token);
 
-  const text = extractTextContent(msg);
-  if (!text) return; // media-only messages handled below
-
-  // Permission-reply intercept: "yes xxxxx" or "no xxxxx"
-  const permMatch = /^\s*(y|yes|n|no)\s+([a-km-z]{5})\s*$/i.exec(text);
-  if (permMatch) {
-    const requestId = permMatch[2]!.toLowerCase();
-    const behavior = permMatch[1]!.toLowerCase().startsWith('y') ? 'allow' : 'deny';
-    void mcp.notification({
-      method: 'notifications/claude/channel/permission',
-      params: { request_id: requestId, behavior },
-    });
-    pendingPermissions.delete(requestId);
-    const ack = behavior === 'allow' ? '✅ Allowed' : '❌ Denied';
-    await client
-      .sendMessage(userId, msg.context_token, {
-        type: MessageType.TEXT,
-        text_item: { text: ack },
-      })
-      .catch(() => {});
-    return;
-  }
-
-  // Build media metadata
+  // Build media metadata first (before any early return)
   let imagePath: string | undefined;
   let attachmentFileId: string | undefined;
   let attachmentName: string | undefined;
@@ -369,13 +359,55 @@ async function handleInbound(msg: WeixinMessage): Promise<void> {
         process.stderr.write(`wechat channel: image download failed: ${e}\n`);
       }
     } else if (item.type === MessageType.FILE && item.file_item?.media) {
-      attachmentFileId = JSON.stringify(item.file_item.media);
+      const handle = generateFileKey();
+      mediaHandles.set(handle, item.file_item.media);
+      attachmentFileId = handle;
       attachmentName = safeName(item.file_item.file_name) ?? undefined;
     } else if (item.type === MessageType.VOICE && item.voice_item?.media) {
-      attachmentFileId = JSON.stringify(item.voice_item.media);
+      const handle = generateFileKey();
+      mediaHandles.set(handle, item.voice_item.media);
+      attachmentFileId = handle;
       attachmentName = safeName(item.voice_item.text) ?? undefined;
     } else if (item.type === MessageType.VIDEO && item.video_item?.media) {
-      attachmentFileId = JSON.stringify(item.video_item.media);
+      const handle = generateFileKey();
+      mediaHandles.set(handle, item.video_item.media);
+      attachmentFileId = handle;
+    }
+  }
+
+  const text = extractTextContent(msg);
+  if (!text && !imagePath && !attachmentFileId) return;
+
+  // Permission-reply intercept: "yes <hex>" or "no <hex>"
+  if (text) {
+    const permMatch = /^\s*(y|yes|n|no)\s+([0-9a-f]{6})\s*$/i.exec(text);
+    if (permMatch) {
+      const requestId = permMatch[2]!.toLowerCase();
+      if (!pendingPermissions.has(requestId)) {
+        await client
+          .sendMessage(userId, msg.context_token, {
+            type: MessageType.TEXT,
+            text_item: { text: 'Unknown or expired permission request.' },
+          })
+          .catch(() => {});
+        return;
+      }
+      const behavior = permMatch[1]!.toLowerCase().startsWith('y') ? 'allow' : 'deny';
+      mcp.notification({
+        method: 'notifications/claude/channel/permission',
+        params: { request_id: requestId, behavior },
+      }).catch(err => {
+        process.stderr.write(`wechat channel: permission notify failed: ${err}\n`);
+      });
+      pendingPermissions.delete(requestId);
+      const ack = behavior === 'allow' ? 'Allowed' : 'Denied';
+      await client
+        .sendMessage(userId, msg.context_token, {
+          type: MessageType.TEXT,
+          text_item: { text: ack },
+        })
+        .catch(() => {});
+      return;
     }
   }
 

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { randomBytes } from 'node:crypto';
 
@@ -32,6 +32,17 @@ export class AccessControl {
 
   get mode(): AccessMode {
     return this.config.mode;
+  }
+
+  get allowedUsers(): string[] {
+    return [...this.config.allowedUsers];
+  }
+
+  /**
+   * Reload config from disk (for cross-process consistency).
+   */
+  reload(): void {
+    this.config = this.load();
   }
 
   /**
@@ -107,6 +118,8 @@ export class AccessControl {
 
   private save(): void {
     mkdirSync(dirname(this.configPath), { recursive: true });
-    writeFileSync(this.configPath, JSON.stringify(this.config, null, 2));
+    const tmp = this.configPath + '.tmp';
+    writeFileSync(tmp, JSON.stringify(this.config, null, 2) + '\n', { mode: 0o600 });
+    renameSync(tmp, this.configPath);
   }
 }

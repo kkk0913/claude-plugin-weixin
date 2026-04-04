@@ -60,6 +60,9 @@ export class WeixinClient {
    */
   setAuth(config: AccountConfig): void {
     this.config = config;
+    if (config.baseUrl) {
+      this.baseUrl = config.baseUrl;
+    }
   }
 
   /**
@@ -152,7 +155,11 @@ export class WeixinClient {
       context_token: contextToken,
     };
     const body: SendMessageReq = { msg, base_info: this.baseInfo };
-    return this.post<SendMessageResp>('/ilink/bot/sendmessage', body);
+    const resp = await this.post<SendMessageResp>('/ilink/bot/sendmessage', body);
+    if (resp.ret !== 0) {
+      throw new Error(`sendMessage failed: ${resp.errmsg} (${resp.ret})`);
+    }
+    return resp;
   }
 
   /**

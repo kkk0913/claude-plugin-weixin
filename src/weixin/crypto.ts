@@ -35,5 +35,5 @@ export function decryptAesEcb(ciphertext: Buffer, keyHex: string): Buffer {
  * PKCS7 padding rounds up to the next 16-byte boundary.
  */
 export function aesEcbPaddedSize(size: number): number {
-  return Math.ceil(size / 16) * 16;
+  return size + (16 - (size % 16));
 }
