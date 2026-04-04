@@ -4,7 +4,8 @@ WeChat channel plugin for Claude Code — bridge WeChat messages to Claude Code 
 
 ## Features
 
-- **QR code login** — scan once, session saved for subsequent runs
+- **QR code login** — scan to login, session saved and auto-restored across restarts
+- **Auto re-login** — session expired? new QR appears automatically, no restart needed
 - **Long-poll message delivery** — real-time WeChat message bridging
 - **Media support** — send/receive images, video, files (up to 50MB)
 - **Access control** — pairing mode (default), allowlist, or disabled
@@ -58,7 +59,11 @@ wechat channel: scan QR to login:
 https://liteapp.weixin.qq.com/q/...?bot_type=3
 ```
 
-Open the URL in a browser and scan with WeChat. Session is saved to `~/.claude/channels/weixin/account.json`.
+Scan the QR code with WeChat. Session is saved to `~/.claude/channels/weixin/account.json`.
+
+### Session Expiry
+
+The WeChat iLink bot API does not support token refresh. When the session expires (e.g. after extended downtime), the plugin automatically displays a new QR code — just scan again. No restart required.
 
 ## Access Control
 

@@ -443,6 +443,28 @@ async function handleInbound(msg: WeixinMessage): Promise<void> {
   });
 }
 
+// ─── QR Login ───────────────────────────────────────────────────────
+
+async function doQrLogin(): Promise<void> {
+  const qrcodeModule = await import('qrcode-terminal');
+  // qrcode-terminal uses module.exports = { generate }, ESM import wraps it as .default
+  const qrcodeTerminal = (qrcodeModule as any).default ?? qrcodeModule;
+
+  const config = await client.loginWithQr(async ({ qrUrl, status }) => {
+    if (status === 'scaned') {
+      process.stderr.write('wechat channel: QR scanned — confirm on your phone\n');
+      return;
+    }
+    if (!qrUrl) return;
+
+    process.stderr.write('\nwechat channel: scan QR with WeChat to login:\n\n');
+    qrcodeTerminal.generate(qrUrl, { small: false });
+    process.stderr.write('\nScan above QR with WeChat (2 min timeout)\n');
+  });
+  saveAccount(config);
+  process.stderr.write('wechat channel: login successful, session saved\n');
+}
+
 // ─── Polling Loop ───────────────────────────────────────────────────
 
 let polling = true;
@@ -456,10 +478,11 @@ async function pollLoop(): Promise<void> {
       const resp = await client.getUpdates(cursor);
 
       if (resp.ret !== 0) {
-        // errcode -14 = rate limit, pause briefly
+        // errcode -14 = session timeout — re-login
         if (resp.errcode === -14) {
-          process.stderr.write(`wechat channel: rate limited, pausing 5s\n`);
-          await sleep(5000);
+          process.stderr.write('wechat channel: session expired, re-logging in via QR\n');
+          cursor = '';
+          await doQrLogin();
           continue;
         }
         throw new Error(`getUpdates error: ${resp.errmsg} (${resp.ret})`);
@@ -520,11 +543,7 @@ async function main(): Promise<void> {
   } else {
     process.stderr.write('wechat channel: no saved session, starting QR login\n');
     try {
-      const config = await client.loginWithQr(url => {
-        process.stderr.write(`wechat channel: scan QR to login:\n${url}\n`);
-      });
-      saveAccount(config);
-      process.stderr.write('wechat channel: login successful, session saved\n');
+      await doQrLogin();
     } catch (err) {
       process.stderr.write(`wechat channel: login failed: ${err}\n`);
       process.stderr.write('wechat channel: restart to retry QR login\n');

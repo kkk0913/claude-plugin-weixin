@@ -67,54 +67,69 @@ export class WeixinClient {
 
   /**
    * Full QR login flow: get QR → poll status → return AccountConfig.
+   * Retries up to 3 times on QR expiration.
    * Throws on timeout or error.
    */
-  async loginWithQr(onQrUrl?: (url: string) => void): Promise<AccountConfig> {
-    // Step 1: get QR code
-    const qrResp = await this.post<LoginQrResp>('/ilink/bot/get_bot_qrcode?bot_type=3', {
-      base_info: this.baseInfo,
-    });
-    if (qrResp.ret !== 0) {
-      throw new Error(`Failed to get QR code: ${qrResp.errmsg} (${qrResp.ret})`);
-    }
+  async loginWithQr(onQr?: (data: { qrUrl: string; status?: string }) => void | Promise<void>): Promise<AccountConfig> {
+    const maxRetries = 3;
 
-    // Notify caller with QR image
-    if (onQrUrl && qrResp.qrcode_img_content) {
-      onQrUrl(qrResp.qrcode_img_content);
-    }
+    for (let retry = 0; retry < maxRetries; retry++) {
+      // Step 1: get QR code (GET, no auth — matches openclaw-weixin)
+      const qrResp = await this.get<LoginQrResp>('/ilink/bot/get_bot_qrcode?bot_type=3');
+      if (qrResp.ret !== 0) {
+        throw new Error(`Failed to get QR code: ${qrResp.errmsg} (${qrResp.ret})`);
+      }
 
-    // Step 2: poll for scan/confirm
-    const maxAttempts = 120; // 2 minutes at 1s intervals
-    for (let i = 0; i < maxAttempts; i++) {
-      await new Promise(r => setTimeout(r, 1000));
-      const status = await this.post<QrStatusResp>('/ilink/bot/get_qrcode_status', {
-        qrcode: qrResp.qrcode,
-        base_info: this.baseInfo,
-      });
+      // qrcode_img_content is actually the scannable QR URL (not a PNG image)
+      if (onQr && qrResp.qrcode_img_content) {
+        await onQr({ qrUrl: qrResp.qrcode_img_content });
+      }
 
-      if (status.status === 'confirmed' && status.bot_token) {
-        this.config = {
-          token: status.bot_token,
-          baseUrl: status.baseurl ?? this.baseUrl,
-          userId: status.ilink_user_id!,
-          ilinkBotId: status.ilink_bot_id!,
-        };
-        if (status.baseurl) {
-          this.baseUrl = status.baseurl;
+      // Step 2: poll for scan/confirm
+      const maxAttempts = 120; // 2 minutes at 1s intervals
+      for (let i = 0; i < maxAttempts; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        const status = await this.get<QrStatusResp>(
+          `/ilink/bot/get_qrcode_status?qrcode=${encodeURIComponent(qrResp.qrcode)}`,
+        );
+
+        if (status.status === 'confirmed' && status.bot_token) {
+          this.config = {
+            token: status.bot_token,
+            baseUrl: status.baseurl ?? this.baseUrl,
+            userId: status.ilink_user_id!,
+            ilinkBotId: status.ilink_bot_id!,
+          };
+          if (status.baseurl) {
+            this.baseUrl = status.baseurl;
+          }
+          return this.config;
         }
-        return this.config;
-      }
 
-      if (status.status === 'expired') {
-        throw new Error('QR code expired');
-      }
+        if (status.status === 'scaned') {
+          if (onQr) await onQr({ qrUrl: '', status: 'scaned' });
+          continue;
+        }
 
-      // ret: 0 = ok, 1 = waiting for scan/confirm, -1 = in progress
-      if (status.ret !== 0 && status.ret !== 1 && status.ret !== -1) {
-        throw new Error(`QR status error: ${status.errmsg} (${status.ret})`);
+        if (status.status === 'scaned_but_redirect' && status.redirect_host) {
+          // Server wants us to use a different host — update baseUrl and retry
+          this.baseUrl = `https://${status.redirect_host}`;
+          if (onQr) await onQr({ qrUrl: '', status: 'scaned' });
+          continue;
+        }
+
+        if (status.status === 'expired') {
+          break; // break inner loop to retry with new QR
+        }
+
+        // ret: 0 = ok, 1 = waiting for scan/confirm, -1 = in progress
+        if (status.ret !== 0 && status.ret !== 1 && status.ret !== -1) {
+          throw new Error(`QR status error: ${status.errmsg} (${status.ret})`);
+        }
       }
+      // QR expired — loop will retry with a fresh QR
     }
-    throw new Error('QR login timed out');
+    throw new Error('QR login timed out after retries');
   }
 
   /**
@@ -209,6 +224,25 @@ export class WeixinClient {
       headers['Authorization'] = `Bearer ${this.config.token}`;
     }
     return headers;
+  }
+
+  private async get<T>(path: string, timeout?: number): Promise<T> {
+    const url = `${this.baseUrl}${path}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout ?? this.timeout);
+
+    try {
+      const resp = await fetch(url, {
+        method: 'GET',
+        signal: controller.signal,
+      });
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+      }
+      return (await resp.json()) as T;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private async post<T>(
