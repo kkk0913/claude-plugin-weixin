@@ -4,8 +4,8 @@
   "description": "WeChat channel for Claude Code — bridge WeChat messages via openclaw-weixin API",
   "mcpServers": {
     "wechat": {
-      "command": "node",
-      "args": ["./dist/server.js"]
+      "command": "npx",
+      "args": ["tsx", "./src/server.ts"]
     }
   }
 }
