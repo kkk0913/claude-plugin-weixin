@@ -2,7 +2,7 @@
   "mcpServers": {
     "wechat": {
       "command": "bash",
-      "args": ["-c", "source ~/.bashrc && bun run --cwd \"${CLAUDE_PLUGIN_ROOT}\" --shell=bun --silent start"]
+      "args": ["-c", "PATH=\"$HOME/.bun/bin:$PATH\" bun run --cwd \"${CLAUDE_PLUGIN_ROOT}\" --shell=bun --silent start"]
     }
   }
 }
