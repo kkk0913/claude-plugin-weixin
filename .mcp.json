@@ -1,8 +1,11 @@
 {
   "mcpServers": {
-    "wechat": {
+    "weixin": {
       "command": "bash",
-      "args": ["-c", "PATH=\"$HOME/.bun/bin:$PATH\" bun run --cwd \"${CLAUDE_PLUGIN_ROOT}\" --shell=bun --silent start"]
+      "args": [
+        "-c",
+        "export PATH=\"$HOME/.bun/bin:$PATH\"; bun run --cwd \"${CLAUDE_PLUGIN_ROOT}\" --shell=bun --silent start"
+      ]
     }
   }
 }

@@ -1,5 +1,6 @@
 {
-  "name": "wechat",
+  "name": "weixin",
   "version": "1.0.0",
-  "description": "WeChat channel for Claude Code — bridge WeChat messages via openclaw-weixin API"
+  "description": "WeChat channel for Claude Code — bridge WeChat messages to Claude Code via MCP",
+  "keywords": ["weixin", "wechat", "messaging", "channel", "mcp"]
 }

@@ -20,10 +20,7 @@ export function encodeVersion(semver: string): number {
  * Generate random uint32 encoded as base64 for X-WECHAT-UIN header.
  */
 export function randomUinBase64(): string {
-  const buf = randomBytes(4);
-  // Ensure positive uint32
-  buf[0] &= 0x7f;
-  const num = buf.readUInt32BE(0);
+  const num = randomBytes(4).readUInt32BE(0);
   return Buffer.from(String(num)).toString('base64');
 }
 

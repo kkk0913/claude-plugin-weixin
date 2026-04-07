@@ -1,11 +1,10 @@
-# claude-plugin-weixin
+# claude-channel-weixin
 
 WeChat channel plugin for Claude Code — bridge WeChat messages to Claude Code via MCP.
 
 ## Features
 
 - **QR code login** — scan to login, session saved and auto-restored across restarts
-- **Auto re-login** — session expired? new QR appears automatically, no restart needed
 - **Long-poll message delivery** — real-time WeChat message bridging
 - **Media support** — send/receive images, video, files (up to 50MB)
 - **Access control** — pairing mode (default), allowlist, or disabled
@@ -13,57 +12,38 @@ WeChat channel plugin for Claude Code — bridge WeChat messages to Claude Code 
 - **Permission relay** — approve/deny Claude Code tool permissions from WeChat
 - **Typing indicator** — shows typing status while processing
 
-## Requirements
-
-- Node.js >= 22
-- Claude Code with plugin support
-
 ## Installation
 
+Install from GitHub via Claude Code plugin marketplace:
+
 ```bash
-git clone https://github.com/kkk0913/claude-plugin-weixin.git
-cd claude-plugin-weixin
-npm install
-npm run build
-
-# Create symlink for Claude Code plugin system
-ln -s "$(pwd)" ~/.claude/plugins/local/wechat
+claude plugin install github:kkk0913/claude-channel-weixin
 ```
 
-Then add to `~/.claude/plugins/installed_plugins.json`:
+Or clone and install locally:
 
-```json
-{
-  "version": 2,
-  "plugins": {
-    "wechat@local": [
-      {
-        "scope": "user",
-        "installPath": "~/.claude/plugins/local/wechat",
-        "version": "1.0.0",
-        "installedAt": "2026-04-04T00:00:00.000Z"
-      }
-    ]
-  }
-}
+```bash
+git clone https://github.com/kkk0913/claude-channel-weixin.git
+cd claude-channel-weixin
 ```
-
-Restart Claude Code or run `/reload-plugins`.
 
 ## First Run
 
-On first launch, the server prints a QR code URL to stderr:
-
-```
-wechat channel: scan QR to login:
-https://liteapp.weixin.qq.com/q/...?bot_type=3
-```
-
-Scan the QR code with WeChat. Session is saved to `~/.claude/channels/weixin/account.json`.
+1. Run `/weixin:configure` to check status
+2. Run `/weixin:configure login` — then `/reload-plugins` to restart the server
+3. The server prints a browser login link to stderr — open it in your browser and scan with WeChat within 8 minutes
+4. Session is saved to `~/.claude/channels/weixin/account.json`
 
 ### Session Expiry
 
-The WeChat iLink bot API does not support token refresh. When the session expires (e.g. after extended downtime), the plugin automatically displays a new QR code — just scan again. No restart required.
+When the session expires, the server stops polling and logs the error code. Run:
+
+```
+/weixin:configure clear
+/weixin:configure login
+```
+
+Then `/reload-plugins` to restart with a fresh QR login.
 
 ## Access Control
 
@@ -71,7 +51,7 @@ New WeChat users require pairing by default:
 
 1. Unknown user sends a message
 2. Server generates a 6-char pairing code and replies to the user
-3. Run in Claude Code: `/wechat:access pair <code>`
+3. Run in Claude Code: `/weixin:access pair <code>`
 4. User is added to the allowlist
 
 Modes (configured in `~/.claude/channels/weixin/access.json`):
@@ -81,6 +61,13 @@ Modes (configured in `~/.claude/channels/weixin/access.json`):
 | `pairing` | New users get a pairing code (default) |
 | `allowlist` | Only pre-approved users can message |
 | `disabled` | All inbound messages are dropped |
+
+## Skills
+
+| Skill | Description |
+|-------|-------------|
+| `/weixin:configure` | Check status, login, clear session |
+| `/weixin:access` | Manage access control (pair, allow, remove, policy) |
 
 ## MCP Tools
 
@@ -105,14 +92,12 @@ src/
 │   └── media.ts           # Upload/download media files
 └── util/
     └── helpers.ts         # Utility functions
-```
 
-## Development
-
-```bash
-npm run dev    # Watch mode
-npm run build  # One-time build
-npm start      # Run server directly
+skills/
+├── access/
+│   └── SKILL.md           # Access control skill
+└── configure/
+    └── SKILL.md           # Setup and login skill
 ```
 
 ## State Directory

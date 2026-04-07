@@ -1,25 +1,15 @@
 {
-  "name": "claude-plugin-weixin",
+  "name": "claude-channel-weixin",
   "version": "1.0.0",
-  "description": "WeChat channel plugin for Claude Code — bridges WeChat to Claude Code via MCP",
+  "description": "WeChat channel for Claude Code — bridge WeChat messages to Claude Code via MCP",
   "license": "MIT",
   "type": "module",
-  "engines": {
-    "node": ">=22"
-  },
-  "main": "dist/server.js",
-  "files": [
-    "dist/",
-    ".claude-plugin/",
-    ".mcp.json",
-    "README.md"
-  ],
+  "bin": "./src/server.ts",
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "start": "bun install --no-summary && bun src/server.ts",
-    "dev": "tsc --watch",
-    "prepublishOnly": "npm run build"
+    "dev": "tsc --watch"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",

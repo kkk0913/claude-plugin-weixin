@@ -182,6 +182,10 @@ export interface AccountConfig {
   baseUrl: string;
   userId: string; // ilink_user_id
   ilinkBotId: string;
+  qrcode?: string; // 登录用的 qrcode，用于状态查询
+  qrcodeUrl?: string; // 扫码登录链接
+  createdAt?: number; // token 创建时间戳
+  expiresIn?: number; // token 有效期（秒）
 }
 
 // ─── Media Types ────────────────────────────────────────────────────

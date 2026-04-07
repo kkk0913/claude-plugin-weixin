@@ -1,14 +1,14 @@
 {
-  "name": "local-weixin",
+  "name": "claude-channel-weixin",
   "owner": {
-    "name": "local"
+    "name": "kkk0913"
   },
   "plugins": [
     {
-      "name": "wechat",
-      "source": "./",
-      "description": "WeChat channel for Claude Code",
-      "version": "1.0.0"
+      "name": "weixin",
+      "description": "WeChat channel for Claude Code — bridge WeChat messages to Claude Code via MCP.",
+      "version": "1.0.0",
+      "source": "./"
     }
   ]
 }
