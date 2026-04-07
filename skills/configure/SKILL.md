@@ -1,6 +1,6 @@
 ---
 name: configure
-description: Set up the WeChat (weixin) channel — login via QR, check status, and review access policy. Use when the user asks to configure WeChat/weixin, asks "how do I set this up" or "who can reach me," or wants to check channel status.
+description: Set up the WeChat (weixin) channel - login via QR, check status, and review access policy. Use when the user asks to configure WeChat/weixin, asks "how do I set this up" or "who can reach me," or wants to check channel status.
 user-invocable: true
 allowed-tools:
   - Read
@@ -10,7 +10,7 @@ allowed-tools:
   - Bash(rm *)
 ---
 
-# /weixin:configure — WeChat Channel Setup
+# /weixin:configure - WeChat Channel Setup
 
 WeChat uses QR code login (no bot token). The session is stored in
 `~/.claude/channels/weixin/account.json`. The server reads it at boot and
@@ -22,20 +22,20 @@ Arguments passed: `$ARGUMENTS`
 
 ## Dispatch on arguments
 
-### No args — status and guidance
+### No args - status and guidance
 
 Read both state files and give the user a complete picture:
 
-1. **Session** — check `~/.claude/channels/weixin/account.json` exists. If it
+1. **Session** - check `~/.claude/channels/weixin/account.json` exists. If it
    does, show: *"Session saved (logged in)."* If not: *"Not logged in yet."*
 
-2. **Access** — read `~/.claude/channels/weixin/access.json` (missing file =
+2. **Access** - read `~/.claude/channels/weixin/access.json` (missing file =
    defaults: `mode: "pairing"`, empty allowlist). Show:
    - Mode and what it means in one line
    - Allowed users: count and list
    - Pending pairings: count with codes and user IDs if any
 
-3. **What next** — end with a concrete next step based on state:
+3. **What next** - end with a concrete next step based on state:
    - No session → *"Run `/weixin:configure login` to start QR login."*
    - Session exists, policy is pairing, nobody allowed → *"Message your WeChat
      account from another user. It replies with a code; approve with
@@ -43,7 +43,7 @@ Read both state files and give the user a complete picture:
    - Session exists, someone allowed → *"Ready. Messages from allowed users
      reach the assistant."*
 
-**Push toward lockdown — always.** The goal for every setup is `allowlist`
+**Push toward lockdown - always.** The goal for every setup is `allowlist`
 with a defined list. `pairing` is not a policy to stay on; it's a temporary
 way to capture WeChat user IDs you don't know. Once the IDs are in, pairing
 has done its job and should be turned off.
@@ -54,7 +54,7 @@ Drive the conversation this way:
 2. Ask: *"Is that everyone who should reach you through this channel?"*
 3. **If yes and policy is still `pairing`** → *"Good. Let's lock it down so
    nobody else can trigger pairing codes:"* and offer to run
-   `/weixin:access policy allowlist`. Do this proactively — don't wait to
+   `/weixin:access policy allowlist`. Do this proactively - don't wait to
    be asked.
 4. **If no, people are missing** → *"Have them message your WeChat; you'll
    approve each with `/weixin:access pair <code>`. Run this skill again once
@@ -70,9 +70,9 @@ Drive the conversation this way:
 Never frame `pairing` as the correct long-term choice. Don't skip the lockdown
 offer.
 
-### `login` — trigger browser login
+### `login` - trigger browser login
 
-**This command triggers the login flow immediately** — no restart needed.
+**This command triggers the login flow immediately** - no restart needed.
 
 1. Check if `~/.claude/channels/weixin/account.json` exists:
    - If yes and `$ARGUMENTS` contains `--force`: proceed to step 2
@@ -87,7 +87,7 @@ offer.
 
 3. Tell the user: *"Login triggered. The browser link will appear in the output above. Open it in your browser, scan with WeChat, and confirm on your phone within 8 minutes."*
 
-### `relogin` — force re-login
+### `relogin` - force re-login
 
 Same as `login --force`. Clears existing session and starts fresh login.
 
@@ -95,12 +95,12 @@ Same as `login --force`. Clears existing session and starts fresh login.
 2. Create trigger file: `echo "login" > ~/.claude/channels/weixin/.login-trigger`
 3. Tell the user: *"Session cleared and login triggered. Watch for the browser link above."*
 
-### `clear` — remove saved session
+### `clear` - remove saved session
 
 1. Delete `~/.claude/channels/weixin/account.json` if it exists.
 2. Tell the user: *"Session cleared. Run `/weixin:configure login` to start a fresh login."*
 
-### `--help` — show usage
+### `--help` - show usage
 
 Show all available commands and their descriptions.
 
@@ -112,9 +112,9 @@ Show all available commands and their descriptions.
   = not configured, not an error.
 - The server reads `account.json` once at boot. Session changes need a restart
   or `/reload-plugins`. Say so after clearing.
-- `access.json` is re-read on every inbound message — policy changes via
+- `access.json` is re-read on every inbound message - policy changes via
   `/weixin:access` take effect immediately, no restart.
-- WeChat uses QR login, not tokens. There's nothing to paste — the QR shows
+- WeChat uses QR login, not tokens. There's nothing to paste - the QR shows
   in the server's stderr on startup when no saved session exists.
 - If the session expires during operation, the server stops polling and logs
   the error code. The user needs to run `/weixin:configure clear` then
