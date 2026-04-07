@@ -4,7 +4,7 @@
   "description": "WeChat channel for Claude Code — bridge WeChat messages to Claude Code via MCP",
   "license": "MIT",
   "type": "module",
-  "bin": "./src/server.ts",
+  "bin": "./server.ts",
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
