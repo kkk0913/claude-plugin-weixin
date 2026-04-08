@@ -115,12 +115,61 @@ mediaHandleEvictionTimer.unref();
 
 // ─── Error Safety ───────────────────────────────────────────────────
 
-process.on('unhandledRejection', err => {
-  process.stderr.write(`weixin channel: unhandled rejection: ${err}\n`);
+// Track active operations for graceful shutdown
+let activeOperations = 0;
+let fatalErrorOccurred = false;
+
+function isFatalError(err: Error): boolean {
+  const fatalCodes = ['ENOMEM', 'EPIPE', 'EBADF'];
+  const fatalMessages = [
+    'Resource temporarily unavailable',
+    'socket hang up',
+    'write EPIPE',
+    'Cannot find module',
+    'SyntaxError',
+  ];
+
+  if (fatalCodes.includes((err as NodeJS.ErrnoException).code || '')) {
+    return true;
+  }
+  return fatalMessages.some(msg => err.message?.includes(msg));
+}
+
+function gracefulShutdown(exitCode: number, reason: string): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
+  process.stderr.write(`weixin channel: ${reason}, shutting down gracefully...\n`);
+  polling = false;
+
+  // Wait for active operations or timeout
+  const timeoutMs = activeOperations > 0 ? 5000 : 500;
+  setTimeout(() => {
+    process.stderr.write(`weixin channel: shutdown complete (${activeOperations} operations pending)\n`);
+    process.exit(exitCode);
+  }, timeoutMs);
+}
+
+process.on('unhandledRejection', (err) => {
+  const errorMsg = err instanceof Error ? err.message : String(err);
+  process.stderr.write(`weixin channel: unhandled rejection: ${errorMsg}\n`);
+
+  // Only exit for fatal errors
+  if (err instanceof Error && isFatalError(err)) {
+    gracefulShutdown(1, 'fatal rejection');
+  }
 });
-process.on('uncaughtException', err => {
-  process.stderr.write(`weixin channel: uncaught exception: ${err}\n`);
-  process.exit(1);
+
+process.on('uncaughtException', (err) => {
+  const errorMsg = err instanceof Error ? err.message : String(err);
+  process.stderr.write(`weixin channel: uncaught exception: ${errorMsg}\n`);
+
+  if (isFatalError(err)) {
+    gracefulShutdown(1, 'fatal exception');
+  } else {
+    // Log non-fatal but continue running
+    process.stderr.write(`weixin channel: continuing after non-fatal exception\n`);
+  }
 });
 
 // ─── Account Persistence ────────────────────────────────────────────
@@ -546,17 +595,32 @@ async function handleInbound(msg: WeixinMessage): Promise<void> {
     // yesall: enable auto-approve mode
     if (trimmed === 'yesall') {
       writeFileSync(AUTO_APPROVE_FILE, '1', { mode: 0o600 });
+      const failedRequests: string[] = [];
       for (const requestId of [...pendingPermissions.keys()]) {
         try {
           await sendPermissionDecision(requestId, 'allow');
         } catch (err) {
-          process.stderr.write(`weixin channel: auto-approve notify failed: ${err}\n`);
+          const errMsg = err instanceof Error ? err.message : String(err);
+          process.stderr.write(`weixin channel: auto-approve notify failed for ${requestId}: ${errMsg}\n`);
+          failedRequests.push(requestId);
         }
       }
+
+      // Build response message based on success/failure
+      let responseText: string;
+      if (failedRequests.length === 0) {
+        responseText = '已开启自动批准 ✓\n回复 stopall 关闭';
+      } else if (failedRequests.length === pendingPermissions.size) {
+        responseText = `自动批准开启，但所有权限请求通知失败 (${failedRequests.length}个)\n请检查网络或手动重试`;
+      } else {
+        const successCount = pendingPermissions.size - failedRequests.length;
+        responseText = `已开启自动批准 ✓\n成功处理 ${successCount} 个，失败 ${failedRequests.length} 个: ${failedRequests.join(', ')}\n回复 stopall 关闭`;
+      }
+
       await client
         .sendMessage(userId, msg.context_token, {
           type: MessageType.TEXT,
-          text_item: { text: '已开启自动批准 ✓\n回复 stopall 关闭' },
+          text_item: { text: responseText },
         })
         .catch(() => {});
       return;
@@ -805,16 +869,49 @@ async function pollLoop(): Promise<void> {
 
       // Check for errors
       if (resp.ret != null && resp.ret !== 0) {
-        if (resp.errcode === -14) {
-          process.stderr.write(
-            `weixin channel: session expired (errcode=${resp.errcode}, ret=${resp.ret}, errmsg=${resp.errmsg}). ` +
-            `Re-authenticating...\n`,
-          );
-          sessionExpired = true;
-          polling = false;
-          return;
+        // Handle specific error codes with appropriate strategies
+        switch (resp.errcode) {
+          case -14: // Session expired
+            process.stderr.write(
+              `weixin channel: session expired (errcode=${resp.errcode}). Re-authenticating...\n`,
+            );
+            sessionExpired = true;
+            polling = false;
+            return;
+
+          case -1: // Generic error / rate limited
+            process.stderr.write(
+              `weixin channel: rate limited or server busy (errcode=${resp.errcode}). Backing off...\n`,
+            );
+            await sleep(5000);
+            continue;
+
+          case -2: // Invalid parameter
+            process.stderr.write(
+              `weixin channel: invalid request parameter (errcode=${resp.errcode}): ${resp.errmsg}\n`,
+            );
+            // Don't throw, just log and continue (might be a transient issue)
+            consecutiveErrors++;
+            continue;
+
+          case -3: // Network error / timeout
+            process.stderr.write(
+              `weixin channel: network error (errcode=${resp.errcode}). Retrying...\n`,
+            );
+            consecutiveErrors++;
+            continue;
+
+          case -5: // Service unavailable
+            process.stderr.write(
+              `weixin channel: service unavailable (errcode=${resp.errcode}). Backing off...\n`,
+            );
+            await sleep(10000);
+            continue;
+
+          default:
+            // Unknown error - throw to trigger retry logic
+            throw new Error(`getUpdates error: ${resp.errmsg} (ret=${resp.ret}, errcode=${resp.errcode})`);
         }
-        throw new Error(`getUpdates error: ${resp.errmsg} (ret=${resp.ret}, errcode=${resp.errcode})`);
       }
 
       consecutiveErrors = 0;

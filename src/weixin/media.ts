@@ -22,7 +22,20 @@ function detectFileExtension(data: Buffer): string {
   ) return '.webp';
   if (data.subarray(0, 4).toString('ascii') === '%PDF') return '.pdf';
   if (hasPrefix(data, [0x50, 0x4b, 0x03, 0x04])) return '.zip';
-  if (data.length > 12 && data.subarray(4, 8).toString('ascii') === 'ftyp') return '.mp4';
+
+  // ISO Base Media (ftyp box) - MP4/MOV/M4V, etc. Check brand for more specificity
+  if (data.length > 16 && data.subarray(4, 8).toString('ascii') === 'ftyp') {
+    const brand = data.subarray(8, 12).toString('ascii');
+    // QuickTime brand
+    if (brand === 'qt  ') return '.mov';
+    // MP4 brands
+    if (['isom', 'mp41', 'mp42', 'avc1', 'M4V '].includes(brand)) return '.mp4';
+    // M4A audio
+    if (brand === 'M4A ') return '.m4a';
+    // Generic ftyp container
+    return '.mp4';
+  }
+
   if (data.subarray(0, 3).toString('ascii') === 'ID3') return '.mp3';
   if (data.length > 1 && data[0] === 0xff && (data[1] & 0xe0) === 0xe0) return '.mp3';
   return '.bin';
