@@ -1,11 +1,8 @@
 {
   "mcpServers": {
     "weixin": {
-      "command": "bash",
-      "args": [
-        "-c",
-        "export PATH=\"$HOME/.bun/bin:$PATH\"; bun run --cwd \"${CLAUDE_PLUGIN_ROOT}\" --shell=bun --silent start"
-      ]
+      "command": "bun",
+      "args": ["run", "--cwd", "${CLAUDE_PLUGIN_ROOT}", "--shell=bun", "--silent", "start"]
     }
   }
 }

@@ -741,9 +741,19 @@ async function main(): Promise<void> {
   } else {
     // No saved session — wait for login trigger from skill
     await waitForLoginTrigger();
+    // waitForLoginTrigger already consumed the trigger file — go straight to login
+    try {
+      await startBrowserLogin();
+      process.stderr.write('weixin channel: login complete, starting message poll\n');
+      await runWithAutoReLogin();
+    } catch (err) {
+      process.stderr.write(`weixin channel: login failed: ${err}\n`);
+      process.stderr.write('weixin channel: run /weixin:configure login to retry\n');
+    }
+    return;
   }
 
-  // After polling stops, check if we need to login or re-login
+  // After polling stops (session expired or login triggered during poll)
   if (checkLoginTrigger() || sessionExpired) {
     try {
       await startBrowserLogin();

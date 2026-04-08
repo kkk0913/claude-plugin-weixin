@@ -193,7 +193,7 @@ export class WeixinClient {
     }
     const body: SendMessageReq = { msg: msg as any, base_info: this.baseInfo };
     const resp = await this.post<SendMessageResp>('/ilink/bot/sendmessage', body);
-    if (resp.ret !== 0) {
+    if (resp.ret != null && resp.ret !== 0) {
       throw new Error(`sendMessage failed: ${resp.errmsg} (${resp.ret})`);
     }
     return resp;
