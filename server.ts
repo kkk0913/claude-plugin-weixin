@@ -52,57 +52,76 @@ function resetSessionAutoApprove(): void {
 }
 
 resetSessionAutoApprove();
+// ─── Claude Usage ───────────────────────────────────────────────────
 
-// ─── Claude Stats ───────────────────────────────────────────────────
-
-interface StatsCache {
-  version: number;
-  lastComputedDate: string;
-  dailyActivity: Array<{
-    date: string;
-    messageCount: number;
-    sessionCount: number;
-    toolCallCount: number;
-  }>;
-  totalSessions: number;
-  totalMessages: number;
+interface UsageCache {
+  data: {
+    planName?: string;
+    fiveHour: number | null;
+    sevenDay: number | null;
+    fiveHourResetAt?: string;
+    sevenDayResetAt?: string;
+    apiUnavailable?: boolean;
+    apiError?: string;
+  };
+  timestamp: number;
 }
 
-function getClaudeStatsText(): string {
-  try {
-    const statsPath = join(homedir(), '.claude', 'stats-cache.json');
-    const raw = readFileSync(statsPath, 'utf-8');
-    const stats: StatsCache = JSON.parse(raw);
+function formatTimeRemaining(resetAt: string | undefined): string {
+  if (!resetAt) return '未知';
+  const reset = new Date(resetAt);
+  const now = new Date();
+  const diffMs = reset.getTime() - now.getTime();
+  if (diffMs <= 0) return '即将重置';
 
-    // Get today's stats if available
-    const today = new Date().toISOString().split('T')[0];
-    const todayStats = stats.dailyActivity.find(d => d.date === today);
+  const hours = Math.floor(diffMs / (1000 * 60 * 60));
+  const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+  return `${hours}小时${minutes}分钟`;
+}
 
-    // Calculate recent 7-day averages
-    const recentDays = stats.dailyActivity.slice(-7);
-    const avgMessages = recentDays.length > 0
-      ? Math.round(recentDays.reduce((a, b) => a + b.messageCount, 0) / recentDays.length)
-      : 0;
+function getClaudeUsageText(): string {
+  const possiblePaths = [
+    join(homedir(), '.claude', 'plugins', 'cache', 'claude-hud', '.usage-cache.json'),
+    join(homedir(), '.claude', '.usage-cache.json'),
+  ];
 
-    let text = '📊 Claude Code 使用统计\n\n';
-
-    if (todayStats) {
-      text += `今日 (${today}):\n`;
-      text += `  消息: ${todayStats.messageCount}\n`;
-      text += `  会话: ${todayStats.sessionCount}\n`;
-      text += `  工具调用: ${todayStats.toolCallCount}\n\n`;
-    } else {
-      text += `今日 (${today}): 暂无数据\n\n`;
+  let cache: UsageCache | null = null;
+  for (const cachePath of possiblePaths) {
+    try {
+      const raw = readFileSync(cachePath, 'utf-8');
+      cache = JSON.parse(raw) as UsageCache;
+      break;
+    } catch {
+      continue;
     }
-
-    text += `近7天平均: ${avgMessages} 消息/天\n`;
-    text += `总计: ${stats.totalMessages} 消息, ${stats.totalSessions} 会话\n`;
-    text += `数据更新: ${stats.lastComputedDate}`;
-
-    return text;
-  } catch (err) {
-    return '❌ 无法获取统计信息\n请确保 Claude Code 已运行并生成了统计数据';
   }
+
+  if (!cache) {
+    return '无法获取用量信息，请安装 claude-hud 插件';
+  }
+
+  const { data } = cache;
+  if (data.apiUnavailable) {
+    return '用量 API 暂时不可用，请稍后再试';
+  }
+
+  const plan = data.planName || 'Unknown';
+  const fiveHourAvail = data.fiveHour !== null ? 100 - data.fiveHour : null;
+  const sevenDayAvail = data.sevenDay !== null ? 100 - data.sevenDay : null;
+
+  let text = `Claude Code 可用量 (${plan})\n\n`;
+
+  if (fiveHourAvail !== null) {
+    text += `5小时可用: ${fiveHourAvail}% (已用 ${data.fiveHour}%)\n`;
+    text += `重置: ${formatTimeRemaining(data.fiveHourResetAt)}\n\n`;
+  }
+
+  if (sevenDayAvail !== null) {
+    text += `7天可用: ${sevenDayAvail}% (已用 ${data.sevenDay}%)\n`;
+    text += `重置: ${formatTimeRemaining(data.sevenDayResetAt)}\n`;
+  }
+
+  return text;
 }
 
 // ─── Cursor Persistence ─────────────────────────────────────────────
@@ -651,7 +670,7 @@ async function handleInbound(msg: WeixinMessage): Promise<void> {
 
     // Status command: show Claude Code usage stats
     if (trimmed === "/status" || trimmed === "/usage") {
-      const statsText = getClaudeStatsText();
+      const statsText = getClaudeUsageText();
       await client
         .sendMessage(userId, msg.context_token, {
           type: MessageType.TEXT,
