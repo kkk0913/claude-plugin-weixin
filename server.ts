@@ -67,6 +67,20 @@ interface UsageCache {
   timestamp: number;
 }
 
+interface DailyActivity {
+  date: string;
+  messageCount: number;
+  sessionCount: number;
+  toolCallCount: number;
+}
+
+interface StatsCache {
+  dailyActivity: DailyActivity[];
+  totalMessages: number;
+  totalSessions: number;
+  lastComputedDate: string;
+}
+
 function formatTimeRemaining(resetAt: string | undefined): string {
   if (!resetAt) return '未知';
   const reset = new Date(resetAt);
@@ -97,31 +111,66 @@ function getClaudeUsageText(): string {
   }
 
   if (!cache) {
-    return '无法获取用量信息，请安装 claude-hud 插件';
+    return '❌ 用量信息: 无法获取，请安装 claude-hud 插件';
   }
 
   const { data } = cache;
   if (data.apiUnavailable) {
-    return '用量 API 暂时不可用，请稍后再试';
+    return '❌ 用量信息: API 暂时不可用';
   }
 
   const plan = data.planName || 'Unknown';
   const fiveHourAvail = data.fiveHour !== null ? 100 - data.fiveHour : null;
   const sevenDayAvail = data.sevenDay !== null ? 100 - data.sevenDay : null;
 
-  let text = `Claude Code 可用量 (${plan})\n\n`;
+  let text = `📊 用量配额 (${plan})\n`;
 
   if (fiveHourAvail !== null) {
-    text += `5小时可用: ${fiveHourAvail}% (已用 ${data.fiveHour}%)\n`;
-    text += `重置: ${formatTimeRemaining(data.fiveHourResetAt)}\n\n`;
+    text += `5小时可用: ${fiveHourAvail}% (已用 ${data.fiveHour}%) | 重置: ${formatTimeRemaining(data.fiveHourResetAt)}\n`;
   }
 
   if (sevenDayAvail !== null) {
-    text += `7天可用: ${sevenDayAvail}% (已用 ${data.sevenDay}%)\n`;
-    text += `重置: ${formatTimeRemaining(data.sevenDayResetAt)}\n`;
+    text += `7天可用: ${sevenDayAvail}% (已用 ${data.sevenDay}%) | 重置: ${formatTimeRemaining(data.sevenDayResetAt)}\n`;
   }
 
   return text;
+}
+
+function getClaudeActivityText(): string {
+  try {
+    const statsPath = join(homedir(), '.claude', 'stats-cache.json');
+    const raw = readFileSync(statsPath, 'utf-8');
+    const stats: StatsCache = JSON.parse(raw);
+
+    const today = new Date().toISOString().split('T')[0];
+    const todayStats = stats.dailyActivity.find(d => d.date === today);
+
+    const recentDays = stats.dailyActivity.slice(-7);
+    const avgMessages = recentDays.length > 0
+      ? Math.round(recentDays.reduce((a, b) => a + b.messageCount, 0) / recentDays.length)
+      : 0;
+
+    let text = `\n📈 使用统计\n`;
+
+    if (todayStats) {
+      text += `今日: ${todayStats.messageCount} 消息 | ${todayStats.sessionCount} 会话 | ${todayStats.toolCallCount} 工具调用\n`;
+    } else {
+      text += `今日: 暂无数据\n`;
+    }
+
+    text += `近7天平均: ${avgMessages} 消息/天\n`;
+    text += `总计: ${stats.totalMessages} 消息 | ${stats.totalSessions} 会话`;
+
+    return text;
+  } catch {
+    return '\n📈 使用统计: 暂无数据';
+  }
+}
+
+function getClaudeStatsCombined(): string {
+  const usagePart = getClaudeUsageText();
+  const activityPart = getClaudeActivityText();
+  return usagePart + activityPart;
 }
 
 // ─── Cursor Persistence ─────────────────────────────────────────────
@@ -669,8 +718,8 @@ async function handleInbound(msg: WeixinMessage): Promise<void> {
 
 
     // Stats command: show Claude Code usage stats
-    if (trimmed === "/stats" || trimmed === "/usage") {
-      const statsText = getClaudeUsageText();
+    if (trimmed === "/stats") {
+      const statsText = getClaudeStatsCombined();
       await client
         .sendMessage(userId, msg.context_token, {
           type: MessageType.TEXT,
