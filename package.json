@@ -1,6 +1,6 @@
 {
   "name": "weixin-plugin-cc-cx",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "WeChat bridge for Claude Code and Codex",
   "license": "MIT",
   "type": "module",
