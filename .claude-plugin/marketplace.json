@@ -1,5 +1,5 @@
 {
-  "name": "weixin-plugin-cc",
+  "name": "weixin-plugin-cc-cx",
   "owner": {
     "name": "kkk0913"
   },
@@ -7,7 +7,7 @@
     {
       "name": "weixin",
       "description": "WeChat channel for Claude Code — bridge WeChat messages to Claude Code via MCP.",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "source": "./"
     }
   ]

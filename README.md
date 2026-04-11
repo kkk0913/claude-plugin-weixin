@@ -28,8 +28,8 @@ Standalone Claude Code plugin mode is no longer supported. You must run the daem
 Clone the repository locally:
 
 ```bash
-git clone https://github.com/kkk0913/weixin-plugin-cc.git
-cd weixin-plugin-cc
+git clone https://github.com/kkk0913/weixin-plugin-cc-cx.git
+cd weixin-plugin-cc-cx
 ```
 
 Start the daemon from the cloned repo:
@@ -62,13 +62,13 @@ WEIXIN_STATE_DIR=/path/to/state WEIXIN_CODEX_CWD=/path/to/repo WEIXIN_CODEX_MODE
 Add the marketplace in Claude Code:
 
 ```text
-/plugin marketplace add kkk0913/weixin-plugin-cc
+/plugin marketplace add kkk0913/weixin-plugin-cc-cx
 ```
 
 Install the plugin:
 
 ```text
-/plugin install weixin@weixin-plugin-cc
+/plugin install weixin@weixin-plugin-cc-cx
 ```
 
 Reload plugins.
@@ -76,7 +76,7 @@ Reload plugins.
 Start Claude Code with the development channels flag:
 
 ```bash
-claude --dangerously-load-development-channels plugin:weixin@weixin-plugin-cc
+claude --dangerously-load-development-channels plugin:weixin@weixin-plugin-cc-cx
 ```
 
 The Claude plugin process no longer polls WeChat by itself. It only proxies Claude's MCP channel over a local socket to the daemon started from your local clone.

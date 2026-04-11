@@ -28,8 +28,8 @@ Claude Code / Codex 微信桥接器。
 先把仓库拉到本地：
 
 ```bash
-git clone https://github.com/kkk0913/weixin-plugin-cc.git
-cd weixin-plugin-cc
+git clone https://github.com/kkk0913/weixin-plugin-cc-cx.git
+cd weixin-plugin-cc-cx
 ```
 
 从本地仓库启动 daemon：
@@ -62,13 +62,13 @@ WEIXIN_STATE_DIR=/path/to/state WEIXIN_CODEX_CWD=/path/to/repo WEIXIN_CODEX_MODE
 在 Claude Code 中添加 marketplace：
 
 ```text
-/plugin marketplace add kkk0913/weixin-plugin-cc
+/plugin marketplace add kkk0913/weixin-plugin-cc-cx
 ```
 
 安装插件：
 
 ```text
-/plugin install weixin@weixin-plugin-cc
+/plugin install weixin@weixin-plugin-cc-cx
 ```
 
 重新加载插件。
@@ -76,7 +76,7 @@ WEIXIN_STATE_DIR=/path/to/state WEIXIN_CODEX_CWD=/path/to/repo WEIXIN_CODEX_MODE
 使用开发频道标志启动 Claude Code：
 
 ```bash
-claude --dangerously-load-development-channels plugin:weixin@weixin-plugin-cc
+claude --dangerously-load-development-channels plugin:weixin@weixin-plugin-cc-cx
 ```
 
 Claude 插件进程现在不会自己轮询微信，只负责通过本地 socket 把 Claude 的 MCP channel 转发给你从本地仓库启动的 daemon。

@@ -1,6 +1,6 @@
 {
   "name": "weixin",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "WeChat channel for Claude Code — bridge WeChat messages to Claude Code via MCP",
   "keywords": ["weixin", "wechat", "messaging", "channel", "mcp"]
 }
