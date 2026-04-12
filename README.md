@@ -95,12 +95,7 @@ Prefer the npm entrypoints for setup and login. The cc skills remain available, 
 5. The daemon prints a browser login link to stderr — open it in your browser and scan with WeChat within 8 minutes
 6. Session is saved under `${XDG_STATE_HOME:-~/.local/state}/weixin-plugin-cc-cx/account.json` by default, or `WEIXIN_STATE_DIR` if set
 
-Equivalent optional cc skill entrypoints:
-
-```bash
-/weixin:configure
-/weixin:configure login
-```
+Use npm scripts for setup and login (no skill equivalent):
 
 Useful CLI helpers:
 
@@ -120,7 +115,7 @@ npm run clear
 npm run login
 ```
 
-Then `/reload-plugins` if Claude Code needs to reconnect. The `/weixin:configure clear` and `/weixin:configure login` skill commands remain available, but npm is the preferred path.
+Then `/reload-plugins` if Claude Code needs to reconnect. Use `npm run clear` and `npm run login` for session management.
 
 ## Access Control
 
@@ -153,12 +148,12 @@ Only slash commands are recognized for backend switching to avoid accidental mat
 
 ## Skills
 
-These skills are optional terminal shortcuts, not the primary workflow. For startup, login, relogin, clear, and status operations, prefer the npm scripts above.
+These skills are optional terminal shortcuts, not the primary workflow.
 
 | Skill | Description |
 |-------|-------------|
-| `/weixin:configure` | Optional shortcut for status/login/clear; prefer `npm run status/login/relogin/clear` |
 | `/weixin:access` | Manage access control (pair, allow, remove, policy) |
+| `/weixin:permission` | Manage permission mode (auto-approve, manual, bypass) |
 
 ## MCP Tools
 
@@ -276,8 +271,6 @@ test/
 skills/
 ├── access/
 │   └── SKILL.md           # Access control skill
-├── configure/
-│   └── SKILL.md           # Setup and login skill
 └── permission/
     └── SKILL.md           # Permission mode management skill
 ```

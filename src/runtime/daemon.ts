@@ -248,7 +248,7 @@ export async function runWeixinDaemon(): Promise<void> {
       await loginManager.runWithAutoReLogin(() => pollingService.run(), pollRuntimeState);
     } catch (err) {
       process.stderr.write(`weixin channel: login failed: ${err}\n`);
-      process.stderr.write('weixin channel: run /weixin:configure login to retry\n');
+      process.stderr.write('weixin channel: run npm run login to retry\n');
       return;
     }
   }
@@ -261,7 +261,7 @@ export async function runWeixinDaemon(): Promise<void> {
       await loginManager.runWithAutoReLogin(() => pollingService.run(), pollRuntimeState);
     } catch (err) {
       process.stderr.write(`weixin channel: login failed: ${err}\n`);
-      process.stderr.write('weixin channel: run /weixin:configure login to retry\n');
+      process.stderr.write('weixin channel: run npm run login to retry\n');
     }
   }
 

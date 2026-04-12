@@ -95,12 +95,7 @@ Claude 插件进程现在不会自己轮询微信，只负责通过本地 socket
 5. 守护进程会输出一个浏览器登录链接，在浏览器中打开并用微信扫码（8 分钟内有效）
 6. 默认保存在 `${XDG_STATE_HOME:-~/.local/state}/weixin-plugin-cc-cx/account.json`，如果设置了 `WEIXIN_STATE_DIR` 则保存在该目录下
 
-等价的可选 cc skill 入口：
-
-```bash
-/weixin:configure
-/weixin:configure login
-```
+使用 npm 脚本进行设置和登录（无 skill 等价命令）：
 
 常用 CLI 命令：
 
@@ -120,7 +115,7 @@ npm run clear
 npm run login
 ```
 
-如果 Claude Code 需要重连，再执行 `/reload-plugins`。`/weixin:configure clear` 和 `/weixin:configure login` 仍可用，但推荐优先走 npm。
+如果 Claude Code 需要重连，再执行 `/reload-plugins`。会话管理请使用 `npm run clear` 和 `npm run login`。
 
 ## 访问控制
 
@@ -153,12 +148,12 @@ npm run login
 
 ## Skills
 
-这些 skill 只是可选快捷入口，不是主流程。对于启动、登录、重登录、清理会话、状态检查，优先使用上面的 npm 脚本。
+这些 skill 只是可选快捷入口，不是主流程。
 
 | Skill | 说明 |
 |-------|------|
-| `/weixin:configure` | 状态/登录/清理的可选快捷入口；优先使用 `npm run status/login/relogin/clear` |
 | `/weixin:access` | 管理访问控制（配对、添加、移除、策略） |
+| `/weixin:permission` | 管理权限模式（自动批准、手动、绕过） |
 
 ## MCP 工具
 
@@ -276,8 +271,6 @@ test/
 skills/
 ├── access/
 │   └── SKILL.md           # 访问控制 skill
-├── configure/
-│   └── SKILL.md           # 配置和登录 skill
 └── permission/
     └── SKILL.md           # 权限管理模式 skill
 ```
