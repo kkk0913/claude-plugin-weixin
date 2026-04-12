@@ -22,6 +22,7 @@ export interface BridgeToolCallResult {
 
 export interface BridgePermissionRequestParams {
   request_id: string;
+  chat_id?: string;
   tool_name: string;
   description: string;
   input_preview: string;
@@ -32,9 +33,16 @@ export interface BridgePermissionDecisionParams {
   behavior: 'allow' | 'deny';
 }
 
+export interface BridgeEventAckParams {
+  event_id: string;
+  ok: boolean;
+  error?: string;
+}
+
 export type BridgeRequest =
   | { kind: 'request'; id: string; method: 'daemon/ping'; params?: Record<string, never> }
   | { kind: 'request'; id: string; method: 'claude/register'; params: { clientId: string } }
+  | { kind: 'request'; id: string; method: 'event/ack'; params: BridgeEventAckParams }
   | { kind: 'request'; id: string; method: 'tool/call'; params: BridgeToolCallRequest }
   | { kind: 'request'; id: string; method: 'claude/permission_request'; params: BridgePermissionRequestParams };
 
@@ -43,7 +51,7 @@ export type BridgeResponse =
   | { kind: 'response'; id: string; ok: false; error: string };
 
 export type BridgeEvent =
-  | { kind: 'event'; method: 'claude/channel'; params: { content: string | null; meta: BridgeNotificationMeta } }
-  | { kind: 'event'; method: 'claude/permission'; params: BridgePermissionDecisionParams };
+  | { kind: 'event'; event_id: string; method: 'claude/channel'; params: { content: string | null; meta: BridgeNotificationMeta } }
+  | { kind: 'event'; event_id: string; method: 'claude/permission'; params: BridgePermissionDecisionParams };
 
 export type BridgeMessage = BridgeRequest | BridgeResponse | BridgeEvent;

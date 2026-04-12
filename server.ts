@@ -1,11 +1,8 @@
 #!/usr/bin/env node
 
-import { runClaudeProxy } from './src/claude/proxy.js';
-import { runWeixinDaemon } from './src/runtime/daemon.js';
-import { ensureStateDirReady } from './src/runtime/state-dir.js';
+import { loadProjectEnv } from './src/runtime/env.js';
 
-const STATE_DIR = ensureStateDirReady();
-const BRIDGE_SOCKET_FILE = `${STATE_DIR}/daemon.sock`;
+loadProjectEnv();
 
 function debugLog(msg: string): void {
   process.stderr.write(`[${new Date().toISOString()}] ${msg}\n`);
@@ -22,13 +19,19 @@ function getServerRole(): 'daemon' | 'proxy' {
 }
 
 async function main(): Promise<void> {
+  const { ensureStateDirReady } = await import('./src/runtime/state-dir.js');
+  const stateDir = ensureStateDirReady();
+  const bridgeSocketPath = `${stateDir}/daemon.sock`;
+
   if (getServerRole() === 'daemon') {
+    const { runWeixinDaemon } = await import('./src/runtime/daemon.js');
     await runWeixinDaemon();
     return;
   }
 
+  const { runClaudeProxy } = await import('./src/claude/proxy.js');
   await runClaudeProxy({
-    bridgeSocketPath: BRIDGE_SOCKET_FILE,
+    bridgeSocketPath,
     debug: debugLog,
   });
 }

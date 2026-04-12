@@ -1,7 +1,9 @@
 import type { BackendRoute, BackendRouteControl } from '../config/backend-route.js';
-import { MessageType, type WeixinMessage } from '../weixin/types.js';
+import type { WeixinMessage } from '../weixin/types.js';
 import type { ChatBackend } from './backends.js';
+import { CommandService } from './command-service.js';
 import { parseInboundMessage } from './inbound-parser.js';
+import { SystemMessageService } from './system-message-service.js';
 
 export interface InboundRouterOptions {
   inboxDir: string;
@@ -26,39 +28,16 @@ export interface InboundRouterOptions {
   backends: Record<BackendRoute, ChatBackend>;
 }
 
-function getBackendModeMessage(backend: BackendRoute): string {
-  return backend === 'claude'
-    ? '已切换到 Claude Code 模式。后续消息会转发给 Claude。'
-    : '已切换到 Codex 模式。后续消息会转发给 Codex。';
-}
-
-function getBackendAlreadyActiveMessage(backend: BackendRoute): string {
-  return backend === 'claude'
-    ? '当前已经是 Claude Code 模式。'
-    : '当前已经是 Codex 模式。';
-}
-
 export function createInboundRouter(options: InboundRouterOptions): (msg: WeixinMessage) => Promise<void> {
-  async function handleBackendSwitchCommand(chatId: string, contextToken: string, text: string, targetBackend: BackendRoute): Promise<void> {
-    options.debug(`handleInbound: switch command chat=${chatId} target=${targetBackend} text=${JSON.stringify(text)}`);
-    if (!(await options.backends[targetBackend].ensureReady(chatId, contextToken))) {
-      return;
-    }
-
-    options.backendRoutes.reload();
-    const currentBackend = options.backendRoutes.getBackend(chatId);
-    if (currentBackend === targetBackend) {
-      await options.sendTextMessage(chatId, contextToken, getBackendAlreadyActiveMessage(targetBackend));
-      return;
-    }
-
-    options.backendRoutes.setBackend(chatId, targetBackend);
-    await options.sendTextMessage(chatId, contextToken, getBackendModeMessage(targetBackend));
-  }
-
-  async function handleStatsCommand(chatId: string, contextToken: string): Promise<void> {
-    await options.sendTextMessage(chatId, contextToken, await options.getStatsText()).catch(() => {});
-  }
+  const commands = new CommandService({
+    debug: options.debug,
+    sendTextMessage: options.sendTextMessage,
+    getStatsText: options.getStatsText,
+  });
+  const systemMessages = new SystemMessageService({
+    debug: options.debug,
+    client: options.client,
+  });
 
   return async function handleInbound(msg: WeixinMessage): Promise<void> {
     const userId = msg.from_user_id;
@@ -72,14 +51,7 @@ export function createInboundRouter(options: InboundRouterOptions): (msg: Weixin
     }
 
     if (gateResult.action === 'pair') {
-      await options.client.sendMessage(userId, msg.context_token, {
-        type: MessageType.TEXT,
-        text_item: {
-          text: `Pairing required — approve this code in your terminal:\n\n/weixin:access pair ${gateResult.code}`,
-        },
-      }).catch(err => {
-        options.debug(`pairing reply failed: ${err}`);
-      });
+      await systemMessages.sendPairingRequired(userId, msg.context_token, gateResult.code);
       return;
     }
 
@@ -90,12 +62,30 @@ export function createInboundRouter(options: InboundRouterOptions): (msg: Weixin
     const parsed = parseInboundMessage(msg, activeBackend);
 
     if (parsed.kind === 'backend_switch') {
-      await handleBackendSwitchCommand(userId, msg.context_token, parsed.text, parsed.target);
+      await commands.switchBackend(
+        userId,
+        msg.context_token,
+        parsed.text,
+        parsed.target,
+        () => options.backends[parsed.target].ensureReady(userId, msg.context_token),
+        () => {
+          options.backendRoutes.reload();
+          return options.backendRoutes.getBackend(userId);
+        },
+        backend => {
+          options.backendRoutes.setBackend(userId, backend);
+        },
+      );
       return;
     }
 
     if (parsed.kind === 'stats') {
-      await handleStatsCommand(userId, msg.context_token);
+      await commands.sendStats(userId, msg.context_token);
+      return;
+    }
+
+    if (parsed.kind === 'help') {
+      await commands.sendHelp(userId, msg.context_token, activeBackend);
       return;
     }
 
@@ -105,13 +95,7 @@ export function createInboundRouter(options: InboundRouterOptions): (msg: Weixin
       }
     }
 
-    if (options.client.isAuthed && options.client.userId) {
-      options.client.getConfig(options.client.userId, msg.context_token).then(cfg => {
-        if (cfg.typing_ticket) {
-          options.client.sendTyping(options.client.userId!, cfg.typing_ticket).catch(() => {});
-        }
-      }).catch(() => {});
-    }
+    systemMessages.sendTypingIndicator(msg.context_token);
 
     await options.backends[activeBackend].deliver(msg);
   };

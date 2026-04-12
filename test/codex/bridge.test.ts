@@ -49,10 +49,10 @@ test('CodexBridge creates and persists thread mapping on first submit', async ()
   });
 
   assert.deepEqual(calls.map(call => call.method), ['thread/start', 'turn/start']);
-  assert.equal((bridge as any).threadState.threads['user-1'], 'thread-1');
+  assert.equal((bridge as any).threadManager['threadState'].threads['user-1'], 'thread-1');
 
   const { bridge: reloaded } = makeBridge(stateDir);
-  assert.equal((reloaded as any).threadState.threads['user-1'], 'thread-1');
+  assert.equal((reloaded as any).threadManager['threadState'].threads['user-1'], 'thread-1');
 });
 
 test('CodexBridge resumes existing thread and steers active turn', async () => {
@@ -120,7 +120,7 @@ test('CodexBridge resolves approval replies and reports result to chat', async (
   const { bridge, sentTexts } = makeBridge();
   const resolved: unknown[] = [];
 
-  (bridge as any).pendingApprovals.set('req-1', {
+  (bridge as any).approvalManager['pendingApprovals'].set('req-1', {
     requestId: 'req-1',
     method: 'item/commandExecution/requestApproval',
     chatId: 'user-1',
@@ -133,7 +133,7 @@ test('CodexBridge resolves approval replies and reports result to chat', async (
   assert.equal(handled, true);
   assert.deepEqual(resolved, [{ decision: 'accept' }]);
   assert.deepEqual(sentTexts, [{ chatId: 'user-1', contextToken: 'ctx-1', text: 'Approved.' }]);
-  assert.equal((bridge as any).pendingApprovals.size, 0);
+  assert.equal((bridge as any).approvalManager['pendingApprovals'].size, 0);
 });
 
 test('CodexBridge yesall resolves all matching pending approvals', async () => {
@@ -141,7 +141,7 @@ test('CodexBridge yesall resolves all matching pending approvals', async () => {
   const resolved: unknown[] = [];
 
   for (const requestId of ['req-1', 'req-2']) {
-    (bridge as any).pendingApprovals.set(requestId, {
+    (bridge as any).approvalManager['pendingApprovals'].set(requestId, {
       requestId,
       method: 'item/fileChange/requestApproval',
       chatId: 'user-1',
@@ -155,5 +155,5 @@ test('CodexBridge yesall resolves all matching pending approvals', async () => {
   assert.equal(handled, true);
   assert.deepEqual(resolved, [{ decision: 'accept' }, { decision: 'accept' }]);
   assert.deepEqual(sentTexts, [{ chatId: 'user-1', contextToken: 'ctx-1', text: '已全部允许 ✓ (2)' }]);
-  assert.equal((bridge as any).pendingApprovals.size, 0);
+  assert.equal((bridge as any).approvalManager['pendingApprovals'].size, 0);
 });

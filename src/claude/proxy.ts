@@ -20,6 +20,7 @@ const PERMISSION_REQUEST_NOTIFICATION_SCHEMA = z.object({
   method: z.literal('notifications/claude/channel/permission_request'),
   params: z.object({
     request_id: z.string(),
+    chat_id: z.string().optional(),
     tool_name: z.string(),
     description: z.string(),
     input_preview: z.string(),
@@ -119,6 +120,20 @@ function writeUserVisibleError(message: string): void {
   process.stderr.write(`weixin channel: ${message}\n`);
 }
 
+function extractChatIdFromInputPreview(inputPreview: string): string | undefined {
+  const patterns = [
+    /"chat_id"\s*:\s*"([^"]+)"/u,
+    /chat_id['"]?\s*[:=]\s*['"]([^'"\n]+)['"]/iu,
+  ];
+  for (const pattern of patterns) {
+    const match = pattern.exec(inputPreview);
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+  return undefined;
+}
+
 export async function runClaudeProxy(options: ClaudeProxyOptions): Promise<void> {
   const debug = options.debug ?? (() => {});
   const bridge = new DaemonBridgeClient(options.bridgeSocketPath, debug);
@@ -193,13 +208,11 @@ export async function runClaudeProxy(options: ClaudeProxyOptions): Promise<void>
     });
   }
 
-  function forwardEventToMcp(
+  async function forwardEventToMcp(
     method: 'notifications/claude/channel' | 'notifications/claude/channel/permission',
     params: Record<string, unknown>,
-  ): void {
-    void mcp.notification({ method, params }).catch(err => {
-      logError(`failed to forward ${method}`, err);
-    });
+  ): Promise<void> {
+    await mcp.notification({ method, params });
   }
 
   bridge.onDisconnect(() => {
@@ -211,14 +224,28 @@ export async function runClaudeProxy(options: ClaudeProxyOptions): Promise<void>
   });
 
   bridge.onEvent(event => {
-    if (event.method === 'claude/channel') {
-      forwardEventToMcp('notifications/claude/channel', event.params as Record<string, unknown>);
-      return;
-    }
+    void (async () => {
+      try {
+        if (event.method === 'claude/channel') {
+          await forwardEventToMcp('notifications/claude/channel', event.params as Record<string, unknown>);
+        } else if (event.method === 'claude/permission') {
+          await forwardEventToMcp('notifications/claude/channel/permission', event.params as unknown as Record<string, unknown>);
+        }
 
-    if (event.method === 'claude/permission') {
-      forwardEventToMcp('notifications/claude/channel/permission', event.params as unknown as Record<string, unknown>);
-    }
+        await bridge.request('event/ack', { event_id: event.event_id, ok: true });
+      } catch (err) {
+        logError(`failed to forward ${event.method}`, err);
+        try {
+          await bridge.request('event/ack', {
+            event_id: event.event_id,
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        } catch (ackErr) {
+          logError('failed to send event ack', ackErr);
+        }
+      }
+    })();
   });
 
   mcp.oninitialized = () => {
@@ -240,7 +267,10 @@ export async function runClaudeProxy(options: ClaudeProxyOptions): Promise<void>
     PERMISSION_REQUEST_NOTIFICATION_SCHEMA,
     async ({ params }) => {
       await ensureRegistered();
-      await bridge.request('claude/permission_request', params);
+      await bridge.request('claude/permission_request', {
+        ...params,
+        chat_id: params.chat_id ?? extractChatIdFromInputPreview(params.input_preview),
+      });
     },
   );
 

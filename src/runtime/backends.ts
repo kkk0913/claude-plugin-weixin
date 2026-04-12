@@ -50,28 +50,28 @@ export class ClaudeBackendAdapter implements ChatBackend {
     const trimmed = text.trim().toLowerCase();
 
     if (trimmed === 'yesall') {
-      const requestIds = this.options.toolHandlers.listPendingPermissionRequestIds();
+      const requestIds = this.options.toolHandlers.listPendingPermissionRequestIds(chatId);
       if (requestIds.length === 0) {
         return false;
       }
       for (const requestId of requestIds) {
         await this.options.toolHandlers.sendPermissionDecision(requestId, 'allow');
       }
-      await this.options.sendTextMessage(chatId, contextToken, `已全部允许 ✓ (${requestIds.length})`).catch(() => {});
+      await this.sendSafeText(chatId, contextToken, `已全部允许 ✓ (${requestIds.length})`, 'yesall confirmation');
       return true;
     }
 
     const permMatch = /^\s*(y|yes|n|no)\s*$/i.exec(text);
-    if (!permMatch || this.options.toolHandlers.pendingPermissionCount === 0) {
+    if (!permMatch || this.options.toolHandlers.getPendingPermissionCount(chatId) === 0) {
       return false;
     }
 
-    const requestId = this.options.toolHandlers.getNextPendingPermissionRequestId();
+    const requestId = this.options.toolHandlers.getNextPendingPermissionRequestId(chatId);
     if (!requestId) {
       return false;
     }
     if (!this.options.toolHandlers.hasPendingPermission(requestId)) {
-      await this.options.sendTextMessage(chatId, contextToken, 'Unknown or expired permission request.').catch(() => {});
+      await this.sendSafeText(chatId, contextToken, 'Unknown or expired permission request.', 'permission expired');
       return true;
     }
 
@@ -80,10 +80,10 @@ export class ClaudeBackendAdapter implements ChatBackend {
       await this.options.toolHandlers.sendPermissionDecision(requestId, behavior);
     } catch (err) {
       this.options.debug(`permission notify failed: ${err instanceof Error ? err.message : String(err)}`);
-      await this.options.sendTextMessage(chatId, contextToken, 'Permission response failed to send. Try again.').catch(() => {});
+      await this.sendSafeText(chatId, contextToken, 'Permission response failed to send. Try again.', 'permission failure');
       return true;
     }
-    await this.options.sendTextMessage(chatId, contextToken, behavior === 'allow' ? '已允许 ✓' : '已拒绝 ✗').catch(() => {});
+    await this.sendSafeText(chatId, contextToken, behavior === 'allow' ? '已允许 ✓' : '已拒绝 ✗', 'permission result');
     return true;
   }
 
@@ -105,6 +105,7 @@ export class ClaudeBackendAdapter implements ChatBackend {
 
     const delivered = this.options.bridgeServer?.sendEventToClaude({
       kind: 'event',
+      event_id: '',
       method: 'claude/channel',
       params: {
         content: inbound.text,
@@ -129,6 +130,14 @@ export class ClaudeBackendAdapter implements ChatBackend {
     }
 
     this.options.debug(`handleInbound: delivered to claude for ${msg.from_user_id}`);
+  }
+
+  private async sendSafeText(chatId: string, contextToken: string, text: string, label: string): Promise<void> {
+    try {
+      await this.options.sendTextMessage(chatId, contextToken, text);
+    } catch (err) {
+      this.options.debug(`claude backend ${label} send failed for ${chatId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 }
 

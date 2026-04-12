@@ -65,3 +65,7 @@ export function detectBackendSwitchCommand(text: string): BackendRoute | null {
 export function isStatsCommand(text: string): boolean {
   return text.trim().toLowerCase() === '/stats';
 }
+
+export function isHelpCommand(text: string): boolean {
+  return text.trim().toLowerCase() === '/help';
+}

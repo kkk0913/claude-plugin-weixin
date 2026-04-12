@@ -10,6 +10,7 @@ import { FlagFile } from '../state/flag-file.js';
 import { chunkText, assertSendable } from '../util/helpers.js';
 
 export interface PendingPermissionRecord {
+  chatId: string;
   type: string;
   operation: string;
 }
@@ -44,21 +45,43 @@ export class ClaudeToolHandlers {
     this.autoApproveFlag = new FlagFile(options.autoApproveFile);
   }
 
-  getNextPendingPermissionRequestId(): string | null {
-    const next = this.pendingPermissions.keys().next();
-    return next.done ? null : next.value;
+  getNextPendingPermissionRequestId(chatId: string): string | null {
+    for (const [requestId, record] of this.pendingPermissions) {
+      if (record.chatId === chatId) {
+        return requestId;
+      }
+    }
+    return null;
   }
 
   hasPendingPermission(requestId: string): boolean {
     return this.pendingPermissions.has(requestId);
   }
 
-  get pendingPermissionCount(): number {
-    return this.pendingPermissions.size;
+  getPendingPermissionCount(chatId?: string): number {
+    if (!chatId) {
+      return this.pendingPermissions.size;
+    }
+    let count = 0;
+    for (const record of this.pendingPermissions.values()) {
+      if (record.chatId === chatId) {
+        count += 1;
+      }
+    }
+    return count;
   }
 
-  listPendingPermissionRequestIds(): string[] {
-    return [...this.pendingPermissions.keys()];
+  listPendingPermissionRequestIds(chatId?: string): string[] {
+    if (!chatId) {
+      return [...this.pendingPermissions.keys()];
+    }
+    const requestIds: string[] = [];
+    for (const [requestId, record] of this.pendingPermissions) {
+      if (record.chatId === chatId) {
+        requestIds.push(requestId);
+      }
+    }
+    return requestIds;
   }
 
   async sendPermissionDecision(requestId: string, behavior: 'allow' | 'deny'): Promise<void> {
@@ -147,6 +170,11 @@ export class ClaudeToolHandlers {
 
   async handlePermissionRequest(params: BridgePermissionRequestParams): Promise<void> {
     const { request_id, tool_name } = params;
+    const chatId = params.chat_id?.trim();
+    if (!chatId) {
+      this.options.debug(`permission_request dropped: missing chat_id for ${tool_name} (${request_id})`);
+      return;
+    }
     if (this.autoApproveFlag.isEnabled()) {
       this.options.debug(`auto-approve: ${tool_name} (${request_id})`);
       await this.sendPermissionDecision(request_id, 'allow');
@@ -155,22 +183,20 @@ export class ClaudeToolHandlers {
 
     const operation = tool_name.replace(/^mcp__plugin_weixin_weixin__/, '');
     this.pendingPermissions.set(request_id, {
+      chatId,
       type: '工具权限',
       operation,
     });
 
-    this.options.access.reload();
-    for (const userId of this.options.access.allowedUsers) {
-      const text = [
-        '类型: 工具权限',
-        `操作: ${operation}`,
-      ].join('\n');
-      await this.options.client.sendMessage(userId, this.options.getContextToken(userId) ?? '', {
-        type: MessageType.TEXT,
-        text_item: { text },
-      }).catch(err => {
-        this.options.debug(`permission_request send failed: ${err}`);
-      });
-    }
+    const text = [
+      '类型: 工具权限',
+      `操作: ${operation}`,
+    ].join('\n');
+    await this.options.client.sendMessage(chatId, this.options.getContextToken(chatId) ?? '', {
+      type: MessageType.TEXT,
+      text_item: { text },
+    }).catch(err => {
+      this.options.debug(`permission_request send failed for ${chatId}: ${err}`);
+    });
   }
 }

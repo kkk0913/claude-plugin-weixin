@@ -3,8 +3,25 @@ import type { BridgeMessage } from './protocol.js';
 
 export type BridgeMessageHandler = (message: BridgeMessage) => void;
 
-export function writeBridgeMessage(socket: net.Socket, message: BridgeMessage): void {
-  socket.write(JSON.stringify(message) + '\n');
+export function isBridgeSocketWritable(socket: net.Socket): boolean {
+  return !socket.destroyed && socket.writable;
+}
+
+export async function writeBridgeMessage(socket: net.Socket, message: BridgeMessage): Promise<void> {
+  if (!isBridgeSocketWritable(socket)) {
+    throw new Error('bridge socket is not writable');
+  }
+
+  const payload = JSON.stringify(message) + '\n';
+  await new Promise<void>((resolve, reject) => {
+    socket.write(payload, err => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve();
+    });
+  });
 }
 
 export function attachBridgeMessageParser(

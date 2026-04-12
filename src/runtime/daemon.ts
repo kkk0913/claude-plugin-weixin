@@ -111,6 +111,7 @@ function hasActiveClaudeClient(): boolean {
 function sendBridgePermissionDecision(requestId: string, behavior: 'allow' | 'deny'): boolean {
   return bridgeServer?.sendEventToClaude({
     kind: 'event',
+    event_id: '',
     method: 'claude/permission',
     params: { request_id: requestId, behavior },
   }) ?? false;

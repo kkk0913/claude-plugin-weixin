@@ -1,14 +1,16 @@
+import { randomBytes } from 'node:crypto';
 import net from 'node:net';
 import { chmodSync, existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type {
   BridgeEvent,
+  BridgeEventAckParams,
   BridgeMessage,
   BridgePermissionRequestParams,
   BridgeToolCallRequest,
   BridgeToolCallResult,
 } from '../ipc/protocol.js';
-import { attachBridgeMessageParser, writeBridgeMessage } from '../ipc/wire.js';
+import { attachBridgeMessageParser, isBridgeSocketWritable, writeBridgeMessage } from '../ipc/wire.js';
 
 export interface ClaudeClientSession {
   clientId: string;
@@ -23,15 +25,16 @@ export interface BridgeServerHandlers {
 }
 
 const SINGLE_CLIENT_ERROR = 'claude proxy already registered';
+const EVENT_ACK_TIMEOUT_MS = 5000;
 
 function sendBridgeResponse(socket: net.Socket, id: string, ok: true, result?: unknown): void;
 function sendBridgeResponse(socket: net.Socket, id: string, ok: false, error: string): void;
-function sendBridgeResponse(socket: net.Socket, id: string, ok: boolean, payload?: unknown): void {
+async function sendBridgeResponse(socket: net.Socket, id: string, ok: boolean, payload?: unknown): Promise<void> {
   if (ok) {
-    writeBridgeMessage(socket, { kind: 'response', id, ok: true, result: payload });
+    await writeBridgeMessage(socket, { kind: 'response', id, ok: true, result: payload });
     return;
   }
-  writeBridgeMessage(socket, { kind: 'response', id, ok: false, error: String(payload ?? 'unknown error') });
+  await writeBridgeMessage(socket, { kind: 'response', id, ok: false, error: String(payload ?? 'unknown error') });
 }
 
 export class ClaudeBridgeServer {
@@ -40,6 +43,8 @@ export class ClaudeBridgeServer {
   private readonly claudeClients = new Map<string, ClaudeClientSession>();
   private activeClaudeClientId: string | null = null;
   private server: net.Server | null = null;
+  private eventWriteChain = Promise.resolve();
+  private readonly pendingEventAcks = new Map<string, { clientId: string; timer: ReturnType<typeof setTimeout> }>();
 
   constructor(socketPath: string, handlers: BridgeServerHandlers) {
     this.socketPath = socketPath;
@@ -55,7 +60,34 @@ export class ClaudeBridgeServer {
     if (!claudeClient) {
       return false;
     }
-    writeBridgeMessage(claudeClient.socket, event);
+    if (!isBridgeSocketWritable(claudeClient.socket)) {
+      this.handlers.debug(`bridge event dropped: claude socket not writable for client=${claudeClient.clientId}`);
+      this.unregisterClaudeClient(claudeClient.clientId);
+      return false;
+    }
+    const eventId = randomBytes(8).toString('hex');
+    const eventWithAck = { ...event, event_id: eventId } as BridgeEvent;
+    const timer = setTimeout(() => {
+      this.pendingEventAcks.delete(eventId);
+      this.handlers.debug(`bridge event ack timed out for client=${claudeClient.clientId} event=${eventId} method=${event.method}`);
+      claudeClient.socket.destroy();
+    }, EVENT_ACK_TIMEOUT_MS);
+    timer.unref();
+    this.pendingEventAcks.set(eventId, { clientId: claudeClient.clientId, timer });
+
+    this.eventWriteChain = this.eventWriteChain
+      .then(async () => {
+        await writeBridgeMessage(claudeClient.socket, eventWithAck);
+      })
+      .catch(err => {
+        const pendingAck = this.pendingEventAcks.get(eventId);
+        if (pendingAck) {
+          clearTimeout(pendingAck.timer);
+          this.pendingEventAcks.delete(eventId);
+        }
+        this.handlers.debug(`bridge event write failed for client=${claudeClient.clientId}: ${err instanceof Error ? err.message : String(err)}`);
+        claudeClient.socket.destroy();
+      });
     return true;
   }
 
@@ -159,6 +191,12 @@ export class ClaudeBridgeServer {
 
   private unregisterClaudeClient(clientId: string): void {
     this.claudeClients.delete(clientId);
+    for (const [eventId, pending] of this.pendingEventAcks) {
+      if (pending.clientId === clientId) {
+        clearTimeout(pending.timer);
+        this.pendingEventAcks.delete(eventId);
+      }
+    }
     if (this.activeClaudeClientId === clientId) {
       this.activeClaudeClientId = this.pickNewestClaudeClient()?.clientId ?? null;
     }
@@ -173,26 +211,49 @@ export class ClaudeBridgeServer {
     try {
       switch (message.method) {
         case 'daemon/ping':
-          sendBridgeResponse(socket, message.id, true, { ok: true });
+          await sendBridgeResponse(socket, message.id, true, { ok: true });
           return;
 
         case 'claude/register':
           this.registerClaudeClient(message.params.clientId, socket);
-          sendBridgeResponse(socket, message.id, true, { active: true });
+          await sendBridgeResponse(socket, message.id, true, { active: true });
+          return;
+
+        case 'event/ack':
+          this.handleEventAck(message.params);
+          await sendBridgeResponse(socket, message.id, true, { acknowledged: true });
           return;
 
         case 'tool/call':
-          sendBridgeResponse(socket, message.id, true, await this.handlers.onToolCall(message.params));
+          await sendBridgeResponse(socket, message.id, true, await this.handlers.onToolCall(message.params));
           return;
 
         case 'claude/permission_request':
           await this.handlers.onPermissionRequest(message.params);
-          sendBridgeResponse(socket, message.id, true, { queued: true });
+          await sendBridgeResponse(socket, message.id, true, { queued: true });
           return;
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      sendBridgeResponse(socket, message.id, false, msg);
+      try {
+        await sendBridgeResponse(socket, message.id, false, msg);
+      } catch (writeErr) {
+        this.handlers.debug(`bridge response write failed: ${writeErr instanceof Error ? writeErr.message : String(writeErr)}`);
+      }
+    }
+  }
+
+  private handleEventAck(params: BridgeEventAckParams): void {
+    const pending = this.pendingEventAcks.get(params.event_id);
+    if (!pending) {
+      return;
+    }
+    clearTimeout(pending.timer);
+    this.pendingEventAcks.delete(params.event_id);
+    if (!params.ok) {
+      this.handlers.debug(`bridge event ack failed for client=${pending.clientId} event=${params.event_id}: ${params.error ?? 'unknown error'}`);
+      const client = this.claudeClients.get(pending.clientId);
+      client?.socket.destroy();
     }
   }
 

@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import net from 'node:net';
 import type { BridgeEvent, BridgeRequest } from './protocol.js';
-import { attachBridgeMessageParser, writeBridgeMessage } from './wire.js';
+import { attachBridgeMessageParser, isBridgeSocketWritable, writeBridgeMessage } from './wire.js';
 
 type PendingRequest = {
   resolve: (value: unknown) => void;
@@ -108,7 +108,17 @@ export class DaemonBridgeClient {
     const responsePromise = new Promise<T>((resolve, reject) => {
       this.pending.set(id, { resolve: value => resolve(value as T), reject });
     });
-    writeBridgeMessage(this.socket, message);
+
+    try {
+      if (!isBridgeSocketWritable(this.socket)) {
+        throw new Error('daemon bridge not writable');
+      }
+      await writeBridgeMessage(this.socket, message);
+    } catch (err) {
+      this.pending.delete(id);
+      throw err;
+    }
+
     return responsePromise;
   }
 

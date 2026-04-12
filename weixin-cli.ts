@@ -2,7 +2,7 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ensureStateDirReady } from './src/runtime/state-dir.js';
+import { loadProjectEnv } from './src/runtime/env.js';
 
 type AccessConfig = {
   mode: 'pairing' | 'allowlist' | 'disabled';
@@ -10,6 +10,8 @@ type AccessConfig = {
   pendingUsers: Record<string, string>;
 };
 
+loadProjectEnv();
+const { ensureStateDirReady } = await import('./src/runtime/state-dir.js');
 const STATE_DIR = ensureStateDirReady();
 const ACCOUNT_FILE = join(STATE_DIR, 'account.json');
 const ACCESS_FILE = join(STATE_DIR, 'access.json');

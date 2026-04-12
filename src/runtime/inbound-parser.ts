@@ -1,11 +1,12 @@
 import type { BackendRoute } from '../config/backend-route.js';
 import { extractTextContent } from '../weixin/inbound.js';
 import type { WeixinMessage } from '../weixin/types.js';
-import { detectBackendSwitchCommand, isStatsCommand } from './command-parser.js';
+import { detectBackendSwitchCommand, isHelpCommand, isStatsCommand } from './command-parser.js';
 
 export type ParsedInbound =
   | { kind: 'backend_switch'; text: string; target: BackendRoute }
   | { kind: 'stats'; text: string }
+  | { kind: 'help'; text: string }
   | { kind: 'approval_reply'; text: string }
   | { kind: 'chat'; text: string | null };
 
@@ -25,6 +26,10 @@ export function parseInboundMessage(
 
   if (isStatsCommand(text)) {
     return { kind: 'stats', text };
+  }
+
+  if (isHelpCommand(text)) {
+    return { kind: 'help', text };
   }
 
   if (/^\s*(yesall|stopall|y|yes|n|no)\s*$/i.test(text)) {
