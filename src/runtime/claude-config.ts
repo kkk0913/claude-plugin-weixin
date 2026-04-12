@@ -1,10 +1,22 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
+function expandTilde(p: string): string {
+  if (p === '~' || p.startsWith('~/') || p.startsWith('~\\')) {
+    return join(homedir(), p.slice(1));
+  }
+  return p;
+}
+
 export function getClaudeConfigDir(): string {
   const configured = process.env.WEIXIN_CLAUDE_CONFIG_DIR?.trim();
   if (configured) {
-    return configured;
+    return expandTilde(configured);
+  }
+  // Fall back to CLAUDE_CONFIG_DIR (set by Claude Code itself) before hardcoding ~/.claude
+  const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR?.trim();
+  if (claudeConfigDir) {
+    return expandTilde(claudeConfigDir);
   }
   return join(homedir(), '.claude');
 }

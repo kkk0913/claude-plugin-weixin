@@ -119,11 +119,11 @@ function sendBridgePermissionDecision(requestId: string, behavior: 'allow' | 'de
 
 const backendManager = new BackendManager({
   stateDir: STATE_DIR,
-  cwd: process.env.WEIXIN_CODEX_CWD ?? process.cwd(),
-  codexCommand: process.env.WEIXIN_CODEX_COMMAND,
+  cwd: process.env.WEIXIN_CODEX_CWD?.trim() || process.cwd(),
+  codexCommand: process.env.WEIXIN_CODEX_COMMAND?.trim() || undefined,
   model: process.env.WEIXIN_CODEX_MODEL,
-  approvalPolicy: (process.env.WEIXIN_CODEX_APPROVAL_POLICY as any) ?? 'on-request',
-  sandbox: (process.env.WEIXIN_CODEX_SANDBOX as any) ?? 'workspace-write',
+  approvalPolicy: (process.env.WEIXIN_CODEX_APPROVAL_POLICY?.trim() as any) || 'on-request',
+  sandbox: (process.env.WEIXIN_CODEX_SANDBOX?.trim() as any) || 'workspace-write',
   debug: debugLog,
   sendTextMessage,
   getContextToken: userId => sessionState.getContextToken(userId),

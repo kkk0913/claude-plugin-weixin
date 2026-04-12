@@ -188,10 +188,18 @@ export class ClaudeToolHandlers {
       operation,
     });
 
-    const text = [
-      '类型: 工具权限',
+    const lines = [
+      '🔐 权限请求',
       `操作: ${operation}`,
-    ].join('\n');
+    ];
+    if (params.description) {
+      lines.push(`描述: ${params.description}`);
+    }
+    if (params.input_preview) {
+      lines.push(`内容: ${params.input_preview}`);
+    }
+    lines.push('', '回复 y/yes 允许，n/no 拒绝，yesall 全部允许');
+    const text = lines.join('\n');
     await this.options.client.sendMessage(chatId, this.options.getContextToken(chatId) ?? '', {
       type: MessageType.TEXT,
       text_item: { text },

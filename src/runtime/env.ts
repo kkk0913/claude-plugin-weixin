@@ -42,12 +42,12 @@ export function getEnvSummary(): string {
     { key: 'WEIXIN_SERVER_ROLE', value: process.env.WEIXIN_SERVER_ROLE ?? 'auto' },
     { key: 'WEIXIN_ENV_FILE', value: process.env.WEIXIN_ENV_FILE ?? '(none)' },
     { key: 'WEIXIN_STATE_DIR', value: process.env.WEIXIN_STATE_DIR ?? '(default)' },
-    { key: 'WEIXIN_CLAUDE_CONFIG_DIR', value: process.env.WEIXIN_CLAUDE_CONFIG_DIR ?? '~/.claude' },
-    { key: 'WEIXIN_CODEX_CWD', value: process.env.WEIXIN_CODEX_CWD ?? process.cwd() },
-    { key: 'WEIXIN_CODEX_MODEL', value: process.env.WEIXIN_CODEX_MODEL ?? '(unset)' },
-    { key: 'WEIXIN_CODEX_APPROVAL_POLICY', value: process.env.WEIXIN_CODEX_APPROVAL_POLICY ?? 'on-request' },
-    { key: 'WEIXIN_CODEX_SANDBOX', value: process.env.WEIXIN_CODEX_SANDBOX ?? 'workspace-write' },
-    { key: 'WEIXIN_CODEX_COMMAND', value: process.env.WEIXIN_CODEX_COMMAND ?? 'codex' },
+    { key: 'WEIXIN_CLAUDE_CONFIG_DIR', value: process.env.WEIXIN_CLAUDE_CONFIG_DIR ?? process.env.CLAUDE_CONFIG_DIR ?? '~/.claude' },
+    { key: 'WEIXIN_CODEX_CWD', value: process.env.WEIXIN_CODEX_CWD?.trim() || process.cwd() },
+    { key: 'WEIXIN_CODEX_MODEL', value: process.env.WEIXIN_CODEX_MODEL?.trim() || '(unset)' },
+    { key: 'WEIXIN_CODEX_APPROVAL_POLICY', value: process.env.WEIXIN_CODEX_APPROVAL_POLICY?.trim() || 'on-request' },
+    { key: 'WEIXIN_CODEX_SANDBOX', value: process.env.WEIXIN_CODEX_SANDBOX?.trim() || 'workspace-write' },
+    { key: 'WEIXIN_CODEX_COMMAND', value: process.env.WEIXIN_CODEX_COMMAND?.trim() || 'codex' },
   ];
 
   const maxKey = Math.max(...entries.map(e => e.key.length));

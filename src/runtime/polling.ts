@@ -90,7 +90,11 @@ export async function pollLoop(options: PollLoopOptions): Promise<void> {
           options.debug(`skip bot msg type=${msg.message_type}`);
           continue;
         }
-        options.debug(`processing msg from ${msg.from_user_id}, text=${msg.item_list?.[0]?.text_item?.text}`);
+        const firstItem = msg.item_list?.[0];
+        const itemSummary = firstItem
+          ? `type=${firstItem.type} text=${firstItem.text_item?.text ?? firstItem.voice_item?.text ?? '(none)'}`
+          : 'no items';
+        options.debug(`processing msg from ${msg.from_user_id}, ${itemSummary}`);
         await options.handleInbound(msg);
       }
     } catch (err) {

@@ -45,9 +45,11 @@ test('prepareInboundForClaude collects multiple attachment handles', async () =>
     },
   });
 
-  assert.equal(payload.attachmentFileIds.length, 3);
-  assert.equal(stored.length, 3);
+  // Voice messages are not stored as attachments (Claude cannot process audio);
+  // their transcription is returned as text via extractTextContent instead.
+  assert.equal(payload.attachmentFileIds.length, 2);
+  assert.equal(stored.length, 2);
   assert.equal(payload.attachmentFileId, payload.attachmentFileIds[0]);
-  assert.deepEqual(payload.attachmentNames, ['a.pdf', 'voice note']);
+  assert.deepEqual(payload.attachmentNames, ['a.pdf']);
   assert.equal(payload.attachmentName, 'a.pdf');
 });

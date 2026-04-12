@@ -33,8 +33,8 @@ export function extractTextContent(msg: WeixinMessage): string | null {
     if (item.type === MessageType.TEXT && item.text_item?.text) {
       return item.text_item.text;
     }
-    if (item.type === MessageType.VOICE && item.voice_item?.text) {
-      return item.voice_item.text;
+    if (item.type === MessageType.VOICE) {
+      return item.voice_item?.text || '[语音消息]';
     }
   }
   return null;
@@ -57,14 +57,6 @@ export async function prepareInboundForClaude(
         opts.storeMediaHandle(handle, item.file_item.media);
         attachmentFileIds.push(handle);
         const safe = safeName(item.file_item.file_name);
-        if (safe) {
-          attachmentNames.push(safe);
-        }
-      } else if (item.type === MessageType.VOICE && item.voice_item?.media) {
-        const handle = generateFileKey();
-        opts.storeMediaHandle(handle, item.voice_item.media);
-        attachmentFileIds.push(handle);
-        const safe = safeName(item.voice_item.text);
         if (safe) {
           attachmentNames.push(safe);
         }
