@@ -36,3 +36,21 @@ export function loadProjectEnv(cwd = process.cwd()): void {
     }
   }
 }
+
+export function getEnvSummary(): string {
+  const entries = [
+    { key: 'WEIXIN_SERVER_ROLE', value: process.env.WEIXIN_SERVER_ROLE ?? 'auto' },
+    { key: 'WEIXIN_ENV_FILE', value: process.env.WEIXIN_ENV_FILE ?? '(none)' },
+    { key: 'WEIXIN_STATE_DIR', value: process.env.WEIXIN_STATE_DIR ?? '(default)' },
+    { key: 'WEIXIN_CLAUDE_CONFIG_DIR', value: process.env.WEIXIN_CLAUDE_CONFIG_DIR ?? '~/.claude' },
+    { key: 'WEIXIN_CODEX_CWD', value: process.env.WEIXIN_CODEX_CWD ?? process.cwd() },
+    { key: 'WEIXIN_CODEX_MODEL', value: process.env.WEIXIN_CODEX_MODEL ?? '(unset)' },
+    { key: 'WEIXIN_CODEX_APPROVAL_POLICY', value: process.env.WEIXIN_CODEX_APPROVAL_POLICY ?? 'on-request' },
+    { key: 'WEIXIN_CODEX_SANDBOX', value: process.env.WEIXIN_CODEX_SANDBOX ?? 'workspace-write' },
+    { key: 'WEIXIN_CODEX_COMMAND', value: process.env.WEIXIN_CODEX_COMMAND ?? 'codex' },
+  ];
+
+  const maxKey = Math.max(...entries.map(e => e.key.length));
+  const lines = entries.map(e => `  ${e.key.padEnd(maxKey)} = ${e.value}`);
+  return ['weixin channel: environment', ...lines].join('\n');
+}

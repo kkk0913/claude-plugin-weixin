@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { loadProjectEnv } from './src/runtime/env.js';
+import { loadProjectEnv, getEnvSummary } from './src/runtime/env.js';
 
 loadProjectEnv();
 
@@ -24,6 +24,7 @@ async function main(): Promise<void> {
   const bridgeSocketPath = `${stateDir}/daemon.sock`;
 
   if (getServerRole() === 'daemon') {
+    process.stderr.write(`${getEnvSummary()}\n`);
     const { runWeixinDaemon } = await import('./src/runtime/daemon.js');
     await runWeixinDaemon();
     return;
